@@ -1,0 +1,80 @@
+{
+  "tests": [
+    {
+      "bodyWidth": 390,
+      "viewport": 390,
+      "heroHeight": 589,
+      "copyRight": 374,
+      "imageLeft": 16,
+      "stripe": "none",
+      "quickLink": false,
+      "photoCss": "url(\"data:image/jpeg;base64,/9j/4AA",
+      "errors": [],
+      "width": 390,
+      "links": [
+        "#/catalog",
+        "#/by-list"
+      ],
+      "routes": [
+        "#/catalog",
+        "#/by-list"
+      ]
+    },
+    {
+      "bodyWidth": 701,
+      "viewport": 701,
+      "heroHeight": 735,
+      "copyRight": 679,
+      "imageLeft": 22,
+      "stripe": "none",
+      "quickLink": false,
+      "photoCss": "url(\"data:image/jpeg;base64,/9j/4AA",
+      "errors": [],
+      "width": 701
+    },
+    {
+      "bodyWidth": 869,
+      "viewport": 869,
+      "heroHeight": 451,
+      "copyRight": 437,
+      "imageLeft": 457,
+      "stripe": "none",
+      "quickLink": false,
+      "photoCss": "url(\"data:image/jpeg;base64,/9j/4AA",
+      "errors": [],
+      "width": 869
+    },
+    {
+      "bodyWidth": 1440,
+      "viewport": 1440,
+      "heroHeight": 513,
+      "copyRight": 730,
+      "imageLeft": 750,
+      "stripe": "none",
+      "quickLink": false,
+      "photoCss": "url(\"data:image/jpeg;base64,/9j/4AA",
+      "errors": [],
+      "width": 1440,
+      "links": [
+        "#/catalog",
+        "#/by-list"
+      ],
+      "routes": [
+        "#/catalog",
+        "#/by-list"
+      ]
+    }
+  ],
+  "standalone": {
+    "bodyWidth": 390,
+    "viewport": 390,
+    "heroHeight": 589,
+    "copyRight": 374,
+    "imageLeft": 16,
+    "stripe": "none",
+    "quickLink": false,
+    "photoCss": "url(\"data:image/jpeg;base64,/9j/4AA",
+    "errors": [],
+    "bytes": 26210255
+  }
+}

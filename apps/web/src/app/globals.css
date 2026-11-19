@@ -1,0 +1,255 @@
+/* Мост Next.js ↔ стили AMPER A v14.2: только то, чего нет в шаблоне */
+
+:root {
+  --body: var(--font-amper-body), Manrope, "Segoe UI", Arial, sans-serif;
+  --display: var(--font-amper-display), "Roboto Condensed", Impact, "Arial Narrow",
+    sans-serif;
+}
+
+/* Резкий возврат позиции при «Назад», без плавной прокрутки всей страницы */
+html {
+  scroll-behavior: auto;
+}
+
+/*
+  Читаемость ближе к оригиналу v14.2:
+  antialiased делает Manrope тоньше; мелкий текст — чуть плотнее и выше по кеглю.
+*/
+body {
+  font-size: 16px;
+  font-weight: 500;
+  -webkit-font-smoothing: auto;
+  -moz-osx-font-smoothing: auto;
+  text-rendering: optimizeLegibility;
+}
+
+.nav-wrap a,
+.nav-wrap .nav-action,
+.head-icon span,
+.head-cat,
+.global-search input,
+.global-search button,
+.hero-overline,
+.hero-bottom,
+.hero-copy > p,
+.btn,
+.task-head > span:last-child,
+.task-item strong,
+.task-item small,
+.category-index,
+.category-bottom h3,
+.section-more,
+.section-head-copy > p,
+.product-code,
+.product-title,
+.product-meta,
+.product-purchase small,
+.purchase-btn,
+.path-kicker,
+.path-card p,
+.path-cta,
+.service-grid strong,
+.service-grid span,
+.footer-main a:not(.logo),
+.footer-main strong,
+.footer-about p,
+.footer-bottom,
+.breadcrumbs,
+.eyebrow,
+.detail-copy .sku,
+.detail-description,
+.detail-help,
+.detail-uom,
+.page-intro p {
+  font-weight: 600;
+}
+
+.detail-uom {
+  margin: 4px 0 0;
+  color: #777;
+  font-size: 14px;
+}
+
+/* Чуть крупнее по высоте строки, без растягивания по ширине */
+.nav-wrap a,
+.nav-wrap .nav-action {
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.head-icon span {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.product-code,
+.product-purchase small,
+.task-item small,
+.footer-bottom,
+.category-index {
+  font-size: 14px;
+  line-height: 1.45;
+  letter-spacing: 0;
+}
+
+.product-meta,
+.footer-main a:not(.logo),
+.section-more,
+.hero-bottom,
+.service-grid span {
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.hero-copy > p,
+.path-card p,
+.page-intro p,
+.detail-description {
+  line-height: 1.62;
+}
+
+/* Внутренние страницы раньше использовали .wrap — совмещаем с .frame из v14.2 */
+.wrap {
+  width: min(calc(100% - 88px), var(--max, 1360px));
+  margin: 0 auto;
+}
+
+@media (max-width: 1200px) {
+  .wrap {
+    width: min(calc(100% - 44px), var(--max, 1360px));
+  }
+}
+
+@media (max-width: 700px) {
+  .wrap {
+    width: min(calc(100% - 32px), var(--max, 1360px));
+  }
+}
+
+/* Кнопки на служебных страницах (корзина, формы) */
+.btn-yellow {
+  background: var(--yellow, #ffd21a);
+  color: var(--ink, #141515);
+}
+
+.btn-ink {
+  background: #151515;
+  color: #fff;
+  border-color: #151515;
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--line, #e5e6e4);
+}
+
+.page-title {
+  padding: 28px 0 8px;
+  font-family: var(--display);
+  font-size: clamp(28px, 4vw, 44px);
+}
+
+/* .notice в amper-v14 — toast (fixed); для контентных плашек не трогаем его */
+.empty-state {
+  padding: 24px;
+  background: var(--paper, #fff);
+  border: 1px solid var(--line, #e5e6e4);
+  border-radius: var(--radius, 13px);
+  color: var(--ink, #141515);
+}
+
+/* «АМПЕР» в копирайте — тем же светом, что заголовки колонок подвала */
+.footer-brand {
+  color: #ffe062;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* Ссылка на агентство в подвале — техничный акцент без подчёркивания */
+.footer-credit-link {
+  display: inline-block;
+  margin-left: 2px;
+  padding: 1px 7px 2px;
+  border: 1px solid rgba(255, 210, 26, 0.45);
+  border-radius: 3px;
+  background: rgba(255, 210, 26, 0.12);
+  color: #ffd21a;
+  font-family: ui-monospace, "Cascadia Code", "Consolas", monospace;
+  font-size: 0.95em;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+  vertical-align: baseline;
+}
+
+.footer-credit-link:hover {
+  background: rgba(255, 210, 26, 0.22);
+  border-color: #ffd21a;
+  color: #ffe062;
+}
+
+.cart-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--paper, #fff);
+}
+
+.cart-table th,
+.cart-table td {
+  border-bottom: 1px solid var(--line, #e5e6e4);
+  padding: 12px;
+  text-align: left;
+}
+
+.checkout-form {
+  display: grid;
+  gap: 12px;
+  max-width: 520px;
+  background: var(--paper, #fff);
+  padding: 20px;
+  border-radius: var(--radius, 13px);
+  border: 1px solid var(--line, #e5e6e4);
+}
+
+.checkout-form input,
+.checkout-form textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--line, #e5e6e4);
+  border-radius: 10px;
+  font: inherit;
+}
+
+/* Блок «Описание» на карточке товара */
+.detail-section-title {
+  margin: 0 0 8px;
+  font-family: var(--display);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+}
+
+.detail-description > p {
+  margin: 0;
+}
+
+.detail-description-empty {
+  color: var(--muted, #6d7073);
+}
+
+/* Сводка товаров на оформлении */
+.checkout-summary ul {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.checkout-summary li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  line-height: 1.4;
+}

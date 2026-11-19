@@ -1,0 +1,26 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: amper-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: medusa
+      POSTGRES_PASSWORD: medusa
+      POSTGRES_DB: medusa-amper
+    volumes:
+      - amper_pg_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: amper-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - amper_redis_data:/data
+
+volumes:
+  amper_pg_data:
+  amper_redis_data:

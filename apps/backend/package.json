@@ -1,0 +1,42 @@
+{
+  "name": "amper-backend",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Medusa backend AMPER + MoySklad",
+  "scripts": {
+    "build": "medusa build",
+    "seed": "medusa exec ./src/scripts/seed.ts",
+    "start": "medusa start",
+    "dev": "medusa develop",
+    "sync:moysklad": "medusa exec ./src/scripts/sync-moysklad.ts",
+    "backfill:prices": "medusa exec ./src/scripts/backfill-variant-prices.ts",
+    "backfill:uom": "medusa exec ./src/scripts/backfill-uom.ts",
+    "fix:inventory": "medusa exec ./src/scripts/fix-inventory-links.ts",
+    "sync:stock": "medusa exec ./src/scripts/sync-stock-only.ts",
+    "user": "medusa user"
+  },
+  "dependencies": {
+    "@medusajs/admin-sdk": "2.22.2",
+    "@medusajs/cli": "2.22.2",
+    "@medusajs/framework": "2.22.2",
+    "@medusajs/link-modules": "^2.22.2",
+    "@medusajs/medusa": "2.22.2",
+    "@medusajs/ui": "^4.2.9",
+    "ajv": "^8.20.0"
+  },
+  "devDependencies": {
+    "@swc/core": "^1.7.28",
+    "@types/node": "^20.12.11",
+    "@types/react": "^18.3.2",
+    "@types/react-dom": "^18.2.25",
+    "prop-types": "^15.8.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.14"
+  },
+  "engines": {
+    "node": ">=22.22.0"
+  }
+}

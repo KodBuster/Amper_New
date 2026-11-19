@@ -1,0 +1,45 @@
+# Зависимости и сборка
+node_modules/
+.Next/
+.next/
+.medusa/
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Секреты и окружение
+.env
+.env.local
+.env.*.local
+apps/*/.env
+apps/*/.env.local
+!.env.example
+
+# Локальный статус синка МойСклад
+apps/backend/data/
+
+# Загруженные фото товаров (File Module Medusa) — не в git
+apps/backend/static/
+
+# Логи и кэш
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.cache/
+.turbo/
+
+# ОС и IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Тесты и временные файлы
+coverage/
+tmp/
+temp/
+*.pem
+first_entry_point/_docx_extract*.txt

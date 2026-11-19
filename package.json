@@ -1,0 +1,17 @@
+{
+  "name": "amper-new",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=apps/web & npm run dev --workspace=apps/backend",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "dev:backend": "npm run dev --workspace=apps/backend",
+    "build": "npm run build --workspace=apps/backend && npm run build --workspace=apps/web",
+    "sync:moysklad": "npm run sync:moysklad --workspace=apps/backend"
+  },
+  "engines": {
+    "node": ">=22.22.0"
+  }
+}
