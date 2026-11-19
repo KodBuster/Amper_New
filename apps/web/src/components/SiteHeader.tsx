@@ -2,11 +2,12 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { FormEvent, useState } from "react"
+import { FormEvent, useEffect, useState } from "react"
 import { useCart } from "@/components/CartProvider"
 import { Icon } from "@/components/icons"
 import { Logo } from "@/components/Logo"
-import { CATS } from "@/lib/catalog-nav"
+import { categoryShortName, type StoreCategory } from "@/lib/catalog-nav"
+import { medusa } from "@/lib/medusa"
 
 export function SiteHeader() {
   const { items } = useCart()
@@ -14,6 +15,26 @@ export function SiteHeader() {
   const router = useRouter()
   const [q, setQ] = useState("")
   const [navOpen, setNavOpen] = useState(false)
+  const [categories, setCategories] = useState<StoreCategory[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    medusa.store.category
+      .list({ limit: 100, fields: "id,name,handle,is_active" })
+      .then(({ product_categories }) => {
+        if (cancelled) return
+        const list = ((product_categories || []) as StoreCategory[])
+          .filter((c) => (c as { is_active?: boolean }).is_active !== false)
+          .sort((a, b) => a.name.localeCompare(b.name, "ru"))
+        setCategories(list)
+      })
+      .catch(() => {
+        if (!cancelled) setCategories([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   function onSearch(e: FormEvent) {
     e.preventDefault()
@@ -91,13 +112,14 @@ export function SiteHeader() {
         aria-label="Основная навигация"
       >
         <div className="frame nav-wrap">
-          {CATS.map((c) => (
+          {categories.map((c) => (
             <Link
-              key={c.slug}
-              href={`/catalog?cat=${c.slug}`}
+              key={c.id}
+              href={`/catalog?cat=${encodeURIComponent(c.handle)}`}
               onClick={() => setNavOpen(false)}
+              title={c.name}
             >
-              {c.short}
+              {categoryShortName(c.name)}
             </Link>
           ))}
           <span className="nav-spacer" />

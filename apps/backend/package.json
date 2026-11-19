@@ -11,6 +11,7 @@
     "sync:moysklad": "medusa exec ./src/scripts/sync-moysklad.ts",
     "backfill:prices": "medusa exec ./src/scripts/backfill-variant-prices.ts",
     "backfill:uom": "medusa exec ./src/scripts/backfill-uom.ts",
+    "backfill:categories": "medusa exec ./src/scripts/backfill-categories.ts",
     "fix:inventory": "medusa exec ./src/scripts/fix-inventory-links.ts",
     "sync:stock": "medusa exec ./src/scripts/sync-stock-only.ts",
     "user": "medusa user"

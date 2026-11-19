@@ -80,3 +80,21 @@ export function pricePerUomLabel(uom: string): string {
   const unit = (uom || "шт").trim() || "шт"
   return `за ${unit}`
 }
+
+export type StoreCategoryRow = {
+  id: string
+  name: string
+  handle: string
+  is_active?: boolean
+}
+
+/** Активные категории витрины (из папок МойСклад) */
+export async function listStoreCategories(): Promise<StoreCategoryRow[]> {
+  const { product_categories } = await medusa.store.category.list({
+    limit: 100,
+    fields: "id,name,handle,is_active",
+  })
+  return ((product_categories || []) as StoreCategoryRow[])
+    .filter((c) => c.is_active !== false)
+    .sort((a, b) => a.name.localeCompare(b.name, "ru"))
+}

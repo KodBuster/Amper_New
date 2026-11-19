@@ -7,6 +7,7 @@ import {
 import {
   createProductsWorkflow,
   linkSalesChannelsToStockLocationWorkflow,
+  updateProductsWorkflow,
   upsertVariantPricesWorkflow,
 } from "@medusajs/medusa/core-flows"
 import {
@@ -14,6 +15,8 @@ import {
   Modules,
 } from "@medusajs/framework/utils"
 import { MOYSKLAD_MODULE } from "../modules/moysklad"
+import { rootFolderFromPath } from "../modules/moysklad/category-utils"
+import { ensureMoyskladCategories } from "../modules/moysklad/ensure-categories"
 import type MoySkladModuleService from "../modules/moysklad/service"
 import type { MoySkladProduct } from "../modules/moysklad/types"
 
@@ -175,6 +178,13 @@ const syncProductsStep = createStep(
     const client = moysklad.getClient()
     const products = await client.listProducts(false)
 
+    // Категории витрины = корневые папки МойСклад (добавление/удаление папок → меню)
+    const rootNames = products.map((p) => rootFolderFromPath(p.pathName))
+    const { byRootName: categoryByRoot } = await ensureMoyskladCategories(
+      container as never,
+      rootNames
+    )
+
     const byMsId = new Map<
       string,
       Awaited<ReturnType<typeof productModule.listProducts>>[0]
@@ -183,7 +193,7 @@ const syncProductsStep = createStep(
     for (let skip = 0; ; skip += pageSize) {
       const page = await productModule.listProducts(
         {},
-        { take: pageSize, skip, relations: ["variants", "images"] }
+        { take: pageSize, skip, relations: ["variants", "images", "categories"] }
       )
       for (const p of page) {
         const msId = (p.metadata as Record<string, string> | null)?.moysklad_id
@@ -208,6 +218,10 @@ const syncProductsStep = createStep(
         const sku = moysklad.toSku(ms)
         const amount = moysklad.pickSalePriceKopecks(ms)
         const uom = moysklad.pickUomName(ms)
+        const rootFolder = rootFolderFromPath(ms.pathName)
+        const categoryId = rootFolder
+          ? categoryByRoot.get(rootFolder)
+          : undefined
         const found = byMsId.get(ms.id)
         let productId = found?.id
         const msImageCount = ms.images?.meta?.size || 0
@@ -230,8 +244,19 @@ const syncProductsStep = createStep(
             (found.variants?.[0]?.metadata as Record<string, string> | null)
               ?.moysklad_medusa_priced === String(amount)
 
-          // Карточка не менялась, цена в Medusa есть, фото на месте — пропускаем
-          if (meta.moysklad_sync_fp === syncFp && !imagesIncomplete && pricedOk) {
+          const currentCatIds = (
+            (found as { categories?: Array<{ id: string }> }).categories || []
+          ).map((c) => c.id)
+          const categorizedOk =
+            !categoryId || currentCatIds.includes(categoryId)
+
+          // Карточка не менялась, цена/категория на месте, фото ок — пропускаем
+          if (
+            meta.moysklad_sync_fp === syncFp &&
+            !imagesIncomplete &&
+            pricedOk &&
+            categorizedOk
+          ) {
             unchanged += 1
             continue
           }
@@ -268,7 +293,12 @@ const syncProductsStep = createStep(
             oldPrice !== amount ||
             (variant?.sku || "") !== sku
 
-          if (coreChanged || meta.moysklad_sync_fp !== syncFp || !pricedOk) {
+          if (
+            coreChanged ||
+            meta.moysklad_sync_fp !== syncFp ||
+            !pricedOk ||
+            !categorizedOk
+          ) {
             if (variant) {
               const vMeta = (variant.metadata || {}) as Record<string, string>
               // Сначала реальная цена в Pricing — иначе флаг moysklad_medusa_priced врёт
@@ -306,11 +336,25 @@ const syncProductsStep = createStep(
                 moysklad_code: ms.code || "",
                 moysklad_path: ms.pathName || "",
                 moysklad_uom: uom,
+                moysklad_folder: rootFolder,
                 moysklad_product_updated: ms.updated || "",
                 moysklad_sync_fp: syncFp,
                 moysklad_medusa_priced: String(amount),
               },
             })
+
+            if (categoryId && !categorizedOk) {
+              await updateProductsWorkflow(container).run({
+                input: {
+                  products: [
+                    {
+                      id: found.id,
+                      categories: [{ id: categoryId }],
+                    },
+                  ],
+                },
+              })
+            }
             updated += 1
           } else if (!needsImage) {
             // Только отпечаток (например updated) — запишем fp без лишних полей
@@ -374,6 +418,7 @@ const syncProductsStep = createStep(
               moysklad_code: ms.code || "",
               moysklad_path: ms.pathName || "",
               moysklad_uom: uom,
+              moysklad_folder: rootFolder,
               moysklad_product_updated: ms.updated || "",
               moysklad_sync_fp: syncFp,
               moysklad_medusa_priced: String(amount),
@@ -382,6 +427,7 @@ const syncProductsStep = createStep(
             sales_channels: defaultChannelId
               ? [{ id: defaultChannelId }]
               : undefined,
+            categories: categoryId ? [{ id: categoryId }] : undefined,
             variants: [
               {
                 title: ms.name,

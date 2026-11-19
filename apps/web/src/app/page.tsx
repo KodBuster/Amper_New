@@ -2,8 +2,16 @@ import Image from "next/image"
 import Link from "next/link"
 import { ProductCard } from "@/components/ProductCard"
 import { Icon } from "@/components/icons"
-import { CATS, TASKS } from "@/lib/catalog-nav"
-import { medusa, type StoreProduct } from "@/lib/medusa"
+import {
+  categoryImage,
+  findCategoryForTask,
+  TASKS,
+} from "@/lib/catalog-nav"
+import {
+  listStoreCategories,
+  medusa,
+  type StoreProduct,
+} from "@/lib/medusa"
 
 async function loadProducts(): Promise<StoreProduct[]> {
   try {
@@ -47,6 +55,13 @@ function SectionHead({
 
 export default async function HomePage() {
   const products = await loadProducts()
+  let categories: Awaited<ReturnType<typeof listStoreCategories>> = []
+  try {
+    categories = await listStoreCategories()
+  } catch {
+    categories = []
+  }
+  const totalCats = Math.max(categories.length, 1)
 
   return (
     <>
@@ -101,39 +116,42 @@ export default async function HomePage() {
           <span>Выберите задачу, а мы покажем подходящую категорию</span>
         </div>
         <div className="task-grid">
-          {TASKS.map((t) => (
-            <Link
-              key={t.slug}
-              href={`/catalog?cat=${t.slug}`}
-              className="task-item"
-            >
-              <span className="task-img">
-                <Image src={t.image} alt="" width={63} height={63} />
-              </span>
-              <span>
-                <strong>{t.title}</strong>
-                <small>{t.hint}</small>
-              </span>
-              <Icon name="arrow" />
-            </Link>
-          ))}
+          {TASKS.map((t) => {
+            const cat = findCategoryForTask(categories, t.nameHint)
+            const href = cat
+              ? `/catalog?cat=${encodeURIComponent(cat.handle)}`
+              : "/catalog"
+            return (
+              <Link key={t.title} href={href} className="task-item">
+                <span className="task-img">
+                  <Image src={t.image} alt="" width={63} height={63} />
+                </span>
+                <span>
+                  <strong>{t.title}</strong>
+                  <small>{t.hint}</small>
+                </span>
+                <Icon name="arrow" />
+              </Link>
+            )
+          })}
         </div>
       </section>
 
       <section className="frame categories section-space">
         <SectionHead num="01" eyebrow="КАТАЛОГ" title="Всё по категориям" />
         <div className="category-grid">
-          {CATS.map((c, i) => (
+          {categories.map((c, i) => (
             <Link
-              key={c.slug}
-              href={`/catalog?cat=${c.slug}`}
+              key={c.id}
+              href={`/catalog?cat=${encodeURIComponent(c.handle)}`}
               className="category-card"
             >
               <div className="category-index">
-                0{i + 1} / 07
+                {String(i + 1).padStart(2, "0")} /{" "}
+                {String(totalCats).padStart(2, "0")}
               </div>
               <Image
-                src={c.image}
+                src={categoryImage(c.name, i)}
                 alt=""
                 width={420}
                 height={280}

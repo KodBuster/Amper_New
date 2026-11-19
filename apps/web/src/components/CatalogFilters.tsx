@@ -25,7 +25,7 @@ export function CatalogFilters({ count }: { count: number }) {
     if (cat) params.set("cat", cat)
     if (q) params.set("q", q)
     const qs = params.toString()
-    router.push(qs ? `/catalog?${qs}` : "/catalog")
+    router.push(qs ? `/catalog?${qs}` : "/catalog", { scroll: false })
   }
 
   const max = sp.get("max") || "any"
@@ -45,7 +45,9 @@ export function CatalogFilters({ count }: { count: number }) {
           <select
             aria-label="Цена до"
             value={max}
-            onChange={(e) => router.push(buildUrl({ max: e.target.value }))}
+            onChange={(e) =>
+              router.push(buildUrl({ max: e.target.value }), { scroll: false })
+            }
           >
             <option value="any">Любая цена</option>
             <option value="300">300 ₽</option>
@@ -60,7 +62,9 @@ export function CatalogFilters({ count }: { count: number }) {
           <select
             aria-label="Сортировка товаров"
             value={sort}
-            onChange={(e) => router.push(buildUrl({ sort: e.target.value }))}
+            onChange={(e) =>
+              router.push(buildUrl({ sort: e.target.value }), { scroll: false })
+            }
           >
             <option value="popular">По умолчанию</option>
             <option value="low">Сначала дешевле</option>

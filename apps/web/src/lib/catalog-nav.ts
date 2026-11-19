@@ -1,150 +1,102 @@
-/** Категории и быстрый старт — как в AMPER A v14.2 */
+/** Быстрый старт и картинки категорий — визуал v14.2; список категорий с API */
 
-export type CatalogCat = {
-  slug: string
+export type StoreCategory = {
+  id: string
   name: string
-  short: string
-  image: string
-  /**
-   * Подстроки для moysklad_path (нижний регистр).
-   * Совпадают с корневыми/дочерними папками МойСклад.
-   */
-  pathHints: string[]
+  handle: string
+  is_active?: boolean
 }
 
-export const CATS: CatalogCat[] = [
+/** Картинки для сетки на главной — подбираем по словам в названии папки МС */
+const CATEGORY_IMAGES: Array<{ match: string[]; image: string }> = [
   {
-    slug: "cable",
-    name: "Кабель и провод",
-    short: "Кабель",
+    match: ["кабель", "провод", "кабель-канал"],
     image: "/assets/client-category-cable.jpg",
-    pathHints: [
-      "провод и кабель",
-      "кабель-канал",
-      "трубы для кабеля",
-    ],
   },
   {
-    slug: "sockets",
-    name: "Розетки и выключатели",
-    short: "Розетки",
+    match: ["розетк", "выключател", "подрозетник", "удлинител"],
     image: "/assets/client-category-sockets.jpg",
-    pathHints: [
-      "розетки и выключатели",
-      "подрозетники",
-      "распаечные",
-      "удлинители",
-      "ретро электрика",
-    ],
   },
   {
-    slug: "safety",
-    name: "Автоматика и щиты",
-    short: "Автоматы",
+    match: ["автоматик", "щит", "бокс", "счетчик", "стабилизатор"],
     image: "/assets/client-category-safety.jpg",
-    pathHints: [
-      "автоматика",
-      "щитки",
-      "боксы",
-      "электросчетчики",
-      "стабилизаторы",
-    ],
   },
   {
-    slug: "lighting",
-    name: "Свет и лампы",
-    short: "Освещение",
+    match: ["свет", "ламп", "люстр", "светильник"],
     image: "/assets/client-category-lighting.jpg",
-    pathHints: ["светильники", "люстры", "лампы"],
   },
   {
-    slug: "tools",
-    name: "Инструмент",
-    short: "Инструмент",
+    match: ["инструмент"],
     image: "/assets/client-category-tools.jpg",
-    // В МС это ветка «Крепеж и инструмент/Инструмент/…»
-    pathHints: ["/инструмент/", "инструмент/"],
   },
   {
-    slug: "fixings",
-    name: "Крепёж и метизы",
-    short: "Крепёж",
+    match: ["креп", "метиз", "замк", "петл"],
     image: "/assets/client-category-fixings.jpg",
-    pathHints: [
-      "крепеж и инструмент/креп",
-      "/крепеж/",
-      "замки, петли",
-      "метиз",
-    ],
   },
   {
-    slug: "supplies",
-    name: "Расходники",
-    short: "Расходники",
+    match: ["хозтовар", "клемм", "колодк", "расход"],
     image: "/assets/client-category-supplies.jpg",
-    pathHints: [
-      "хозтовар",
-      "клеммы",
-      "колодки",
-      "шины",
-      "наконечники",
-      "сантехника",
-    ],
   },
 ]
+
+const FALLBACK_IMAGES = [
+  "/assets/client-category-cable.jpg",
+  "/assets/client-category-sockets.jpg",
+  "/assets/client-category-safety.jpg",
+  "/assets/client-category-lighting.jpg",
+  "/assets/client-category-tools.jpg",
+  "/assets/client-category-fixings.jpg",
+  "/assets/client-category-supplies.jpg",
+]
+
+export function categoryImage(name: string, index = 0): string {
+  const lower = name.toLowerCase()
+  for (const row of CATEGORY_IMAGES) {
+    if (row.match.some((m) => lower.includes(m))) return row.image
+  }
+  return FALLBACK_IMAGES[index % FALLBACK_IMAGES.length]
+}
+
+/** Короткое имя для шапки */
+export function categoryShortName(name: string): string {
+  const parts = name.split(/[,/]/).map((p) => p.trim()).filter(Boolean)
+  const first = parts[0] || name
+  return first.length > 22 ? `${first.slice(0, 20)}…` : first
+}
 
 export const TASKS = [
   {
     title: "Заменить розетку",
     hint: "Розетки",
-    slug: "sockets",
+    /** Подстрока имени категории МС */
+    nameHint: "розетк",
     image: "/assets/client-category-sockets.jpg",
   },
   {
     title: "Поменять лампу",
     hint: "Лампы",
-    slug: "lighting",
+    nameHint: "ламп",
     image: "/assets/client-category-lighting.jpg",
   },
   {
     title: "Найти крепёж",
     hint: "Саморезы и анкеры",
-    slug: "fixings",
+    nameHint: "креп",
     image: "/assets/client-category-fixings.jpg",
   },
   {
     title: "Выбрать инструмент",
     hint: "Для домашнего ремонта",
-    slug: "tools",
+    nameHint: "инструмент",
     image: "/assets/client-category-tools.jpg",
   },
 ] as const
 
-/** Товар подходит под категорию витрины по пути МойСклад */
-export function productMatchesCat(
-  product: { title?: string | null; metadata?: Record<string, unknown> | null },
-  cat: CatalogCat
-): boolean {
-  const path = String(product.metadata?.moysklad_path || "").toLowerCase()
-  const title = String(product.title || "").toLowerCase()
-  const parts = path
-    .split("/")
-    .map((p) => p.trim())
-    .filter(Boolean)
-
-  // «Крепеж и инструмент» — одна корневая папка МС, режем по дочерней
-  if (cat.slug === "tools") {
-    return parts.some((p) => p === "инструмент" || p.startsWith("инструмент "))
-  }
-  if (cat.slug === "fixings") {
-    if (parts.some((p) => p.includes("замки") || p.includes("метиз"))) return true
-    const underFasteners = parts[0]?.includes("крепеж")
-    const isToolBranch = parts.some(
-      (p) => p === "инструмент" || p.startsWith("инструмент ")
-    )
-    return Boolean(underFasteners && !isToolBranch)
-  }
-
-  const hay = `${path} ${title}`
-  return cat.pathHints.some((h) => hay.includes(h.toLowerCase()))
+/** Найти категорию для задачи быстрого старта */
+export function findCategoryForTask(
+  categories: StoreCategory[],
+  nameHint: string
+): StoreCategory | undefined {
+  const needle = nameHint.toLowerCase()
+  return categories.find((c) => c.name.toLowerCase().includes(needle))
 }

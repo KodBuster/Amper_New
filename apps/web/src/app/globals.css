@@ -253,3 +253,73 @@ body {
   font-size: 14px;
   line-height: 1.4;
 }
+
+/* Каталог: «Категории» фиксированы, список — своё окно со скроллом */
+.catalog-aside {
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 32px);
+}
+
+.catalog-aside h2 {
+  flex: 0 0 auto;
+  margin: 0 0 12px;
+}
+
+.catalog-aside-nav {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: min(420px, calc(100vh - 220px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+  margin: 0 -4px 0 0;
+  scrollbar-width: thin;
+  scrollbar-color: #c5c9c4 transparent;
+}
+
+.catalog-aside-nav::-webkit-scrollbar {
+  width: 6px;
+}
+
+.catalog-aside-nav::-webkit-scrollbar-thumb {
+  background: #c5c9c4;
+  border-radius: 6px;
+}
+
+.catalog-aside-nav a {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 750;
+  padding: 12px 9px;
+  border-radius: 6px;
+  gap: 10px;
+  line-height: 1.35;
+}
+
+.catalog-aside-nav a:hover,
+.catalog-aside-nav a.active {
+  background: #fff0ae;
+}
+
+.catalog-aside .aside-hint {
+  flex: 0 0 auto;
+  margin-top: 12px;
+}
+
+/* Мобилка: пока без отдельного UX — список не режем жёстко */
+@media (max-width: 700px) {
+  .catalog-aside {
+    position: static;
+    max-height: none;
+  }
+
+  .catalog-aside-nav {
+    max-height: none;
+    overflow: visible;
+  }
+}
