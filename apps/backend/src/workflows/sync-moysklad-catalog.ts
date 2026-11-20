@@ -246,9 +246,12 @@ const syncProductsStep = createStep(
           )
           const syncedCount = Number(meta.moysklad_images_count || 0)
           const wantImages = Math.min(msImageCount, MAX_PRODUCT_IMAGES)
+          // В МС есть фото, а в Medusa меньше (или ещё не отмечали) — обязательно качаем
           const imagesIncomplete =
             msImageCount > 0 &&
-            (medusaImageCount < wantImages || syncedCount < wantImages)
+            (medusaImageCount < wantImages ||
+              syncedCount < wantImages ||
+              (!medusaImageCount && !meta.moysklad_images_fp))
 
           const pricedOk =
             meta.moysklad_medusa_priced === String(amount) ||
@@ -272,7 +275,7 @@ const syncProductsStep = createStep(
             continue
           }
 
-          // Сменился состав/версия фото при том же числе — сверяем fingerprint
+          // Не хватает кадров; при смене отпечатка карточки — сверяем набор фото в МС
           let needsImage = imagesIncomplete
           if (
             !needsImage &&

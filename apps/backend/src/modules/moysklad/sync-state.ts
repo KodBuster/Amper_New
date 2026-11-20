@@ -27,6 +27,8 @@ export type MoySkladSyncState = {
 }
 
 const DEFAULT_INTERVAL = 15
+/** Если «running» дольше — считаем прогон зависшим и разрешаем новый */
+const STALE_RUNNING_MS = 10 * 60 * 1000
 const STATE_FILE = path.join(process.cwd(), "data", "moysklad-sync-state.json")
 
 let memory: MoySkladSyncState | null = null
@@ -34,6 +36,28 @@ let memory: MoySkladSyncState | null = null
 function clampInterval(n: number): number {
   if (!Number.isFinite(n)) return DEFAULT_INTERVAL
   return Math.min(1440, Math.max(1, Math.round(n)))
+}
+
+/** Зависший running (падение процесса / долгий прогон) не должен блокировать синк */
+function clearStaleRunningIfNeeded(state: MoySkladSyncState): MoySkladSyncState {
+  if (state.status !== "running" || !state.startedAt) return state
+  const started = new Date(state.startedAt).getTime()
+  if (!Number.isFinite(started)) return state
+  if (Date.now() - started < STALE_RUNNING_MS) return state
+
+  const finishedAt = new Date().toISOString()
+  const next: MoySkladSyncState = {
+    ...state,
+    status: "error",
+    finishedAt,
+    error:
+      "Предыдущая синхронизация зависла (дольше 10 мин) и была сброшена. Запустите снова или дождитесь автосинка.",
+    nextDueAt: computeNextDueAt(finishedAt, state.intervalMinutes),
+  }
+  memory = next
+  writeDisk(next)
+  console.warn("[moysklad-sync] сброшен зависший status=running с", state.startedAt)
+  return next
 }
 
 function ensureDir() {
@@ -70,6 +94,7 @@ function writeDisk(state: MoySkladSyncState) {
 /** Текущее состояние синка (файл + память процесса) */
 export function getSyncState(): MoySkladSyncState {
   if (!memory) memory = readDisk()
+  memory = clearStaleRunningIfNeeded(memory)
   return { ...memory }
 }
 
