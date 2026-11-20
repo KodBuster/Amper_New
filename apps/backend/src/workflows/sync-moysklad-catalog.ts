@@ -172,6 +172,7 @@ const syncProductsStep = createStep(
     const moysklad: MoySkladModuleService = container.resolve(MOYSKLAD_MODULE)
     const productModule = container.resolve(Modules.PRODUCT)
     const salesChannelModule = container.resolve(Modules.SALES_CHANNEL)
+    const fulfillmentModule = container.resolve(Modules.FULFILLMENT)
     const fileModule = container.resolve(Modules.FILE)
 
     await moysklad.resolveDefaults()
@@ -204,6 +205,16 @@ const syncProductsStep = createStep(
 
     const channels = await salesChannelModule.listSalesChannels({}, { take: 1 })
     const defaultChannelId = channels[0]?.id
+
+    // Без shipping profile Store не отдаёт опции Самовывоз/Доставка для корзины
+    const shippingProfiles = await fulfillmentModule.listShippingProfiles(
+      {},
+      { take: 20 }
+    )
+    const defaultShippingProfileId =
+      shippingProfiles.find(
+        (p) => p.type === "default" || /default/i.test(p.name)
+      )?.id || shippingProfiles[0]?.id
 
     let created = 0
     let updated = 0
@@ -412,6 +423,7 @@ const syncProductsStep = createStep(
             handle: h,
             description: ms.description || "",
             status: "published" as const,
+            shipping_profile_id: defaultShippingProfileId,
             metadata: {
               moysklad_id: ms.id,
               moysklad_article: ms.article || "",

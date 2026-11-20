@@ -2,14 +2,27 @@
 
 import { useState } from "react"
 import { useCart } from "@/components/CartProvider"
+import { translateInventoryError } from "@/lib/medusa"
 
-export function AddToCartButton({ variantId }: { variantId: string }) {
+type Props = {
+  variantId: string
+  /** Остаток; null — не ограничиваем */
+  availableQty?: number | null
+}
+
+export function AddToCartButton({ variantId, availableQty = null }: Props) {
   const { addItem } = useCart()
   const [pending, setPending] = useState(false)
   const [ok, setOk] = useState(false)
   const [error, setError] = useState("")
 
+  const outOfStock = typeof availableQty === "number" && availableQty <= 0
+
   async function onClick() {
+    if (outOfStock) {
+      setError("Нет в наличии")
+      return
+    }
     setPending(true)
     setError("")
     setOk(false)
@@ -17,19 +30,28 @@ export function AddToCartButton({ variantId }: { variantId: string }) {
       await addItem(variantId, 1)
       setOk(true)
     } catch (e) {
-      setError((e as Error).message)
+      setError(translateInventoryError(e, availableQty))
     } finally {
       setPending(false)
     }
   }
 
   return (
-    <div style={{ marginTop: 20 }}>
-      <button className="btn btn-yellow" type="button" disabled={pending} onClick={onClick}>
-        {pending ? "Добавляем…" : "В корзину"}
+    <div className="add-to-cart">
+      <button
+        className="btn btn-yellow"
+        type="button"
+        disabled={pending || outOfStock || !variantId}
+        onClick={onClick}
+      >
+        {outOfStock ? "Нет в наличии" : pending ? "Добавляем…" : "В корзину"}
       </button>
-      {ok ? <p>Добавлено в корзину</p> : null}
-      {error ? <p style={{ color: "#b00020" }}>{error}</p> : null}
+      {ok && !outOfStock ? <p className="add-to-cart-ok">Добавлено в корзину</p> : null}
+      {error ? (
+        <p className="add-to-cart-error" role="alert">
+          {error}
+        </p>
+      ) : null}
     </div>
   )
 }

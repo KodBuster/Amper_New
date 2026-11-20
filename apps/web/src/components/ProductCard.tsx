@@ -8,8 +8,11 @@ import {
   formatRub,
   pricePerUomLabel,
   productImageUrls,
+  productInStock,
+  productInventoryQty,
   productPriceRub,
   productUom,
+  translateInventoryError,
   type StoreProduct,
 } from "@/lib/medusa"
 
@@ -41,8 +44,11 @@ function categoryShort(product: StoreProduct): string {
 export function ProductCard({ product }: { product: StoreProduct }) {
   const { addItem } = useCart()
   const [pending, setPending] = useState(false)
+  const [stockError, setStockError] = useState("")
   const price = productPriceRub(product)
   const uom = productUom(product)
+  const inStock = productInStock(product)
+  const availableQty = productInventoryQty(product)
   const variantId = product.variants?.[0]?.id
   const sku =
     (product.variants?.[0]?.sku as string) ||
@@ -54,10 +60,13 @@ export function ProductCard({ product }: { product: StoreProduct }) {
   async function onAdd(e: MouseEvent<HTMLButtonElement>) {
     e.preventDefault()
     e.stopPropagation()
-    if (!variantId || pending) return
+    if (!variantId || pending || !inStock) return
     setPending(true)
+    setStockError("")
     try {
       await addItem(variantId, 1)
+    } catch (err) {
+      setStockError(translateInventoryError(err, availableQty))
     } finally {
       setPending(false)
     }
@@ -100,16 +109,26 @@ export function ProductCard({ product }: { product: StoreProduct }) {
           <div>
             <strong>{price > 0 ? formatRub(price) : "по запросу"}</strong>
             <small>{pricePerUomLabel(uom)}</small>
+            {!inStock ? (
+              <small className="stock-out">Нет в наличии</small>
+            ) : null}
+            {stockError ? (
+              <small className="stock-out">{stockError}</small>
+            ) : null}
           </div>
           <button
             className="purchase-btn"
             type="button"
-            disabled={!variantId || pending}
+            disabled={!variantId || pending || !inStock}
             onClick={onAdd}
-            aria-label={`Добавить в корзину: ${product.title}`}
+            aria-label={
+              inStock
+                ? `Добавить в корзину: ${product.title}`
+                : `Нет в наличии: ${product.title}`
+            }
           >
             <BagIcon />
-            <span>{pending ? "…" : "В корзину"}</span>
+            <span>{pending ? "…" : inStock ? "В корзину" : "Нет"}</span>
           </button>
         </div>
       </div>

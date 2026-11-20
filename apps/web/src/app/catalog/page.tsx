@@ -1,27 +1,63 @@
 import Link from "next/link"
 import { Suspense } from "react"
 import { Breadcrumbs } from "@/components/Breadcrumbs"
+import { CatalogCategoryNav } from "@/components/CatalogCategoryNav"
 import { CatalogFilters } from "@/components/CatalogFilters"
+import { CatalogMobileCategories } from "@/components/CatalogMobileCategories"
 import { Icon } from "@/components/icons"
 import { PageIntro } from "@/components/PageIntro"
 import { ProductCard } from "@/components/ProductCard"
-import { categoryShortName } from "@/lib/catalog-nav"
 import {
+  STORE_PRODUCT_FIELDS,
   listStoreCategories,
   medusa,
+  productInStock,
   productPriceRub,
   type StoreProduct,
 } from "@/lib/medusa"
 
-const PRODUCT_FIELDS = "+metadata,*variants,*variants.metadata,*images,*thumbnail"
 const SHOW_LIMIT = 96
+
+function sortCatalogProducts(
+  list: StoreProduct[],
+  sort: string | undefined
+): StoreProduct[] {
+  if (sort === "low") {
+    return [...list].sort((a, b) => productPriceRub(a) - productPriceRub(b))
+  }
+  if (sort === "high") {
+    return [...list].sort((a, b) => productPriceRub(b) - productPriceRub(a))
+  }
+  return list
+}
+
+/** Ссылка на категорию с сохранением фильтров (наличие, цена, сортировка) */
+function catalogHref(
+  filters: { max?: string; sort?: string; stock?: string },
+  catHandle?: string | null
+): string {
+  const params = new URLSearchParams()
+  if (catHandle) params.set("cat", catHandle)
+  if (filters.max && filters.max !== "any") params.set("max", filters.max)
+  if (filters.sort && filters.sort !== "popular") params.set("sort", filters.sort)
+  if (filters.stock === "in") params.set("stock", "in")
+  const qs = params.toString()
+  return qs ? `/catalog?${qs}` : "/catalog"
+}
 
 export default async function CatalogPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; cat?: string; max?: string; sort?: string }>
+  searchParams: Promise<{
+    q?: string
+    cat?: string
+    max?: string
+    sort?: string
+    stock?: string
+  }>
 }) {
   const sp = await searchParams
+  const filterState = { max: sp.max, sort: sp.sort, stock: sp.stock }
   let products: StoreProduct[] = []
   let error = ""
   let categories: Awaited<ReturnType<typeof listStoreCategories>> = []
@@ -37,21 +73,16 @@ export default async function CatalogPage({
     categories.find((c) => c.id === sp.cat)
 
   try {
+    // order по цене через Store API здесь невалиден — сортируем ниже по productPriceRub
     const { products: list } = await medusa.store.product.list({
       limit: SHOW_LIMIT,
       q: sp.q || undefined,
       category_id: activeCat ? [activeCat.id] : undefined,
-      order:
-        sp.sort === "low"
-          ? "variants.prices.amount"
-          : sp.sort === "high"
-            ? "-variants.prices.amount"
-            : undefined,
-      fields: PRODUCT_FIELDS,
+      fields: STORE_PRODUCT_FIELDS,
     })
     products = (list || []) as StoreProduct[]
 
-    // Цена «до» — на клиентской выборке (Store не всегда умеет max price filter)
+    // Фильтры на клиентской выборке: цена и наличие независимы от сортировки
     if (sp.max && sp.max !== "any") {
       const maxRub = Number(sp.max)
       if (Number.isFinite(maxRub)) {
@@ -61,17 +92,11 @@ export default async function CatalogPage({
         })
       }
     }
-
-    // Fallback сортировки по цене из metadata, если order не сработал
-    if (sp.sort === "low") {
-      products = [...products].sort(
-        (a, b) => productPriceRub(a) - productPriceRub(b)
-      )
-    } else if (sp.sort === "high") {
-      products = [...products].sort(
-        (a, b) => productPriceRub(b) - productPriceRub(a)
-      )
+    if (sp.stock === "in") {
+      products = products.filter((p) => productInStock(p))
     }
+
+    products = sortCatalogProducts(products, sp.sort)
   } catch (e) {
     error = (e as Error).message
   }
@@ -87,7 +112,11 @@ export default async function CatalogPage({
     <div className="frame interior">
       <Breadcrumbs
         items={[
-          { label: "Каталог", href: activeCat || sp.q ? "/catalog" : undefined },
+          {
+            label: "Каталог",
+            href:
+              activeCat || sp.q ? catalogHref(filterState) : undefined,
+          },
           ...(activeCat ? [{ label: activeCat.name }] : []),
           ...(sp.q && !activeCat ? [{ label: "Поиск" }] : []),
         ]}
@@ -96,39 +125,31 @@ export default async function CatalogPage({
 
       <div className="catalog-layout">
         <aside className="catalog-aside">
-          <h2>Категории</h2>
-          {/* Заголовок статичный; список в отдельном окне со скроллом (мобилка — позже) */}
-          <nav className="catalog-aside-nav" aria-label="Категории каталога">
-            <Link
-              className={!sp.cat ? "active" : ""}
-              href="/catalog"
-              scroll={false}
-            >
-              Все товары
-            </Link>
-            {categories.map((c) => (
-              <Link
-                key={c.id}
-                className={
-                  activeCat?.id === c.id || sp.cat === c.handle ? "active" : ""
-                }
-                href={`/catalog?cat=${encodeURIComponent(c.handle)}`}
-                title={c.name}
-                scroll={false}
-              >
-                {categoryShortName(c.name)}
-              </Link>
-            ))}
-          </nav>
+          <h2 className="catalog-cats-title">
+            <span>Категории</span>
+          </h2>
+          <CatalogCategoryNav
+            variant="aside"
+            categories={categories}
+            activeHandle={activeCat?.handle || sp.cat || null}
+            filters={filterState}
+          />
           <div className="aside-hint">
             <Icon name="info" /> Наличие и стоимость уточняются при оформлении.
           </div>
         </aside>
 
         <div className="catalog-content">
-          <Suspense fallback={null}>
-            <CatalogFilters count={products.length} />
-          </Suspense>
+          <div className="catalog-mobile-sticky">
+            <CatalogMobileCategories
+              categories={categories}
+              activeHandle={activeCat?.handle || sp.cat || null}
+              filters={filterState}
+            />
+            <Suspense fallback={null}>
+              <CatalogFilters count={products.length} />
+            </Suspense>
+          </div>
 
           {error ? (
             <div className="empty-state">Не удалось загрузить каталог: {error}</div>
@@ -142,8 +163,8 @@ export default async function CatalogPage({
             <div className="blank-state">
               <h2>Ничего не найдено</h2>
               <p>Попробуйте другую категорию или сбросьте фильтры.</p>
-              <Link className="btn btn-primary" href="/catalog">
-                Все товары <Icon name="arrow" />
+              <Link className="btn btn-primary" href={catalogHref(filterState)}>
+                Все товары
               </Link>
             </div>
           )}

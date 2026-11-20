@@ -8,36 +8,102 @@ import { PageIntro } from "@/components/PageIntro"
 import { useCart } from "@/components/CartProvider"
 import { formatRub } from "@/lib/medusa"
 
+type FieldKey = "name" | "phone" | "email" | "offerAccepted"
+
+const EMPTY_FIELDS: Record<FieldKey, string> = {
+  name: "",
+  phone: "",
+  email: "",
+  offerAccepted: "",
+}
+
 export default function CheckoutPage() {
   const { items, total, completeCheckout } = useCart()
   const [pending, setPending] = useState(false)
-  const [done, setDone] = useState<string | null>(null)
+  const [done, setDone] = useState<{
+    orderId?: string
+    displayId?: number | string
+  } | null>(null)
   const [error, setError] = useState("")
+  const [fieldErrors, setFieldErrors] =
+    useState<Record<FieldKey, string>>(EMPTY_FIELDS)
   const [fulfillment, setFulfillment] = useState<"pickup" | "delivery">("pickup")
+
+  function clearField(key: FieldKey) {
+    setFieldErrors((prev) =>
+      prev[key] ? { ...prev, [key]: "" } : prev
+    )
+  }
+
+  function validate(fd: FormData): {
+    ok: boolean
+    name: string
+    phone: string
+    email: string
+  } {
+    const next = { ...EMPTY_FIELDS }
+    const name = String(fd.get("name") || "").trim()
+    const phone = String(fd.get("phone") || "").trim()
+    const email = String(fd.get("email") || "").trim()
+
+    if (!name) next.name = "Укажите имя"
+    if (!phone) next.phone = "Укажите телефон"
+    if (!email) next.email = "Укажите email"
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      next.email = "Проверьте формат email"
+    }
+    if (!fd.get("offerAccepted")) {
+      next.offerAccepted = "Отметьте, что ознакомлены с условиями продажи"
+    }
+
+    setFieldErrors(next)
+    const ok = !Object.values(next).some(Boolean)
+    if (!ok) {
+      setError("Заполните обязательные поля — они отмечены красной рамкой.")
+    }
+    return { ok, name, phone, email }
+  }
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    setPending(true)
     setError("")
     const fd = new FormData(e.currentTarget)
-    const name = String(fd.get("name") || "").trim()
+    const { ok, name, phone, email } = validate(fd)
+    if (!ok) return
+
     const [first_name, ...rest] = name.split(/\s+/)
     const last_name = rest.join(" ") || first_name
+    setPending(true)
     try {
       const result = await completeCheckout({
-        email: String(fd.get("email") || ""),
+        email,
         first_name: first_name || "Покупатель",
         last_name,
-        phone: String(fd.get("phone") || ""),
+        phone,
+        fulfillment,
         address_1:
           fulfillment === "pickup"
             ? "Самовывоз"
             : String(fd.get("address_1") || "Доставка"),
         city: String(fd.get("city") || "Москва"),
       })
-      setDone(result.orderId || "ok")
+      setDone({
+        orderId: result.orderId,
+        displayId: result.displayId,
+      })
     } catch (err) {
-      setError((err as Error).message)
+      const raw = err instanceof Error ? err.message : String(err)
+      if (/payment collection|payment session|pp_system/i.test(raw)) {
+        setError(
+          "Оплата ещё не настроена в регионе. В Admin: регион → Платежные провайдеры → System Default."
+        )
+      } else if (/shipping method|shipping option|require shipping/i.test(raw)) {
+        setError(
+          "Не выбран способ получения. В Admin: Настройки → Locations & Shipping — создайте Самовывоз/Доставку для склада, либо выполните ensure-fulfillment."
+        )
+      } else {
+        setError(raw)
+      }
     } finally {
       setPending(false)
     }
@@ -66,8 +132,16 @@ export default function CheckoutPage() {
           </div>
           <h1>Заказ принят</h1>
           <p>
-            Спасибо! Заказ отправлен в обработку
-            {done !== "ok" ? ` (ID: ${done})` : ""}.
+            Спасибо! Заказ отправлен в обработку.
+            {done.displayId != null && done.displayId !== "" ? (
+              <>
+                {" "}
+                Ваш номер заказа: <strong>№{done.displayId}</strong>.
+                Сохраните его — по нему можно уточнить статус у менеджера.
+              </>
+            ) : done.orderId ? (
+              <> Внутренний код: {done.orderId}.</>
+            ) : null}
           </p>
           <Link href="/catalog" className="btn btn-primary">
             Продолжить выбор
@@ -94,13 +168,23 @@ export default function CheckoutPage() {
       <div className="checkout-grid">
         <form className="request-form" onSubmit={onSubmit} noValidate>
           <h2>Данные покупателя</h2>
-          <label>
+          <label className={fieldErrors.name ? "field-invalid" : undefined}>
             <span className="field-label">
               Имя <b className="required-mark">*</b>
             </span>
-            <input name="name" autoComplete="name" required placeholder="Ваше имя" />
+            <input
+              name="name"
+              autoComplete="name"
+              required
+              placeholder="Ваше имя"
+              aria-invalid={Boolean(fieldErrors.name)}
+              onChange={() => clearField("name")}
+            />
+            {fieldErrors.name ? (
+              <span className="field-hint">{fieldErrors.name}</span>
+            ) : null}
           </label>
-          <label>
+          <label className={fieldErrors.phone ? "field-invalid" : undefined}>
             <span className="field-label">
               Телефон <b className="required-mark">*</b>
             </span>
@@ -110,9 +194,14 @@ export default function CheckoutPage() {
               autoComplete="tel"
               required
               placeholder="+7 999 123-45-67"
+              aria-invalid={Boolean(fieldErrors.phone)}
+              onChange={() => clearField("phone")}
             />
+            {fieldErrors.phone ? (
+              <span className="field-hint">{fieldErrors.phone}</span>
+            ) : null}
           </label>
-          <label>
+          <label className={fieldErrors.email ? "field-invalid" : undefined}>
             <span className="field-label">
               Email <b className="required-mark">*</b>
             </span>
@@ -122,7 +211,12 @@ export default function CheckoutPage() {
               autoComplete="email"
               required
               placeholder="you@example.com"
+              aria-invalid={Boolean(fieldErrors.email)}
+              onChange={() => clearField("email")}
             />
+            {fieldErrors.email ? (
+              <span className="field-hint">{fieldErrors.email}</span>
+            ) : null}
           </label>
 
           <fieldset className="choice">
@@ -167,13 +261,26 @@ export default function CheckoutPage() {
             <Link href="/privacy">политика обработки данных</Link>.
           </div>
 
-          <label className="law-extra-check">
-            <input type="checkbox" name="offerAccepted" required />
+          <label
+            className={`law-extra-check${
+              fieldErrors.offerAccepted ? " field-invalid" : ""
+            }`}
+          >
+            <input
+              type="checkbox"
+              name="offerAccepted"
+              required
+              aria-invalid={Boolean(fieldErrors.offerAccepted)}
+              onChange={() => clearField("offerAccepted")}
+            />
             <span>
               Ознакомлен(а) с{" "}
               <Link href="/offer">условиями продажи (оферта)</Link> и подтверждаю
               оформление.
             </span>
+            {fieldErrors.offerAccepted ? (
+              <span className="field-hint">{fieldErrors.offerAccepted}</span>
+            ) : null}
           </label>
 
           <p className="legal-info-small">
@@ -189,7 +296,7 @@ export default function CheckoutPage() {
           ) : null}
 
           <button className="btn btn-primary full-btn" type="submit" disabled={pending}>
-            {pending ? "Отправляем…" : "Подтвердить заказ"} <Icon name="arrow" />
+            {pending ? "Отправляем…" : "Подтвердить заказ"}
           </button>
         </form>
 
@@ -210,7 +317,7 @@ export default function CheckoutPage() {
             <strong>{formatRub(total)}</strong>
           </div>
           <Link href="/cart" className="cart-action-link">
-            ← Вернуться в корзину
+            Вернуться в корзину
           </Link>
         </aside>
       </div>

@@ -23,12 +23,71 @@ export type StoreProduct = {
     id: string
     title?: string
     sku?: string | null
+    manage_inventory?: boolean
+    allow_backorder?: boolean
+    inventory_quantity?: number | null
     calculated_price?: {
       calculated_amount?: number
       currency_code?: string
     } | null
     metadata?: Record<string, unknown> | null
   }>
+}
+
+/** Поля товара для витрины: цена, uom и остаток */
+export const STORE_PRODUCT_FIELDS =
+  "+metadata,*variants,*variants.metadata,+variants.inventory_quantity,+variants.manage_inventory,+variants.allow_backorder,*images,*thumbnail"
+
+/** Остаток первого варианта; null — остаток не учитывается */
+export function productInventoryQty(
+  product: StoreProduct | null | undefined
+): number | null {
+  const v = product?.variants?.[0]
+  if (!v) return 0
+  if (v.manage_inventory === false || v.allow_backorder) return null
+  if (typeof v.inventory_quantity === "number") {
+    return Math.max(0, Math.floor(v.inventory_quantity))
+  }
+  return 0
+}
+
+export function productInStock(product: StoreProduct | null | undefined): boolean {
+  const qty = productInventoryQty(product)
+  return qty === null || qty > 0
+}
+
+function errorText(err: unknown): string {
+  if (err instanceof Error) return err.message || ""
+  if (typeof err === "string") return err
+  if (err && typeof err === "object") {
+    const o = err as Record<string, unknown>
+    if (typeof o.message === "string") return o.message
+    if (typeof o.type === "string") return o.type
+  }
+  return String(err || "")
+}
+
+/** Ошибки корзины/остатка — по-русски */
+export function translateInventoryError(
+  err: unknown,
+  available?: number | null
+): string {
+  const msg = errorText(err)
+  const inventoryFail =
+    /required inventory|insufficient_inventory|not have the required|inventory_item/i.test(
+      msg
+    )
+  if (inventoryFail) {
+    if (typeof available === "number") {
+      if (available <= 0) return "Нет в наличии"
+      return `В наличии только ${available}`
+    }
+    return "В наличии меньше, чем запрошено"
+  }
+  if (!msg || msg === "Failed to fetch" || /fetch failed/i.test(msg)) {
+    return "Не удалось выполнить запрос. Попробуйте ещё раз."
+  }
+  return msg
 }
 
 /** URL картинок для галереи: images[], иначе thumbnail */

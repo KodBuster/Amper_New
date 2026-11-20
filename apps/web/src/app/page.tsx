@@ -8,6 +8,7 @@ import {
   TASKS,
 } from "@/lib/catalog-nav"
 import {
+  STORE_PRODUCT_FIELDS,
   listStoreCategories,
   medusa,
   type StoreProduct,
@@ -17,7 +18,7 @@ async function loadProducts(): Promise<StoreProduct[]> {
   try {
     const { products } = await medusa.store.product.list({
       limit: 6,
-      fields: "+metadata,*variants,*variants.metadata,*images,*thumbnail",
+      fields: STORE_PRODUCT_FIELDS,
     })
     return (products || []) as StoreProduct[]
   } catch {
@@ -26,13 +27,11 @@ async function loadProducts(): Promise<StoreProduct[]> {
 }
 
 function SectionHead({
-  num,
   eyebrow,
   title,
   href = "/catalog",
   linkTitle = "Смотреть все",
 }: {
-  num: string
   eyebrow: string
   title: string
   href?: string
@@ -41,13 +40,11 @@ function SectionHead({
   return (
     <div className="section-head">
       <div className="section-head-copy">
-        <span className="eyebrow">
-          {num} / {eyebrow}
-        </span>
+        <span className="eyebrow">{eyebrow}</span>
         <h2>{title}</h2>
       </div>
       <Link href={href} className="section-more">
-        {linkTitle} <Icon name="arrow" />
+        {linkTitle}
       </Link>
     </div>
   )
@@ -61,8 +58,6 @@ export default async function HomePage() {
   } catch {
     categories = []
   }
-  const totalCats = Math.max(categories.length, 1)
-
   return (
     <>
       <section className="hero-section">
@@ -84,7 +79,7 @@ export default async function HomePage() {
             </p>
             <div className="hero-actions">
               <Link href="/catalog" className="btn btn-primary">
-                Перейти в каталог <Icon name="arrow" />
+                Перейти в каталог
               </Link>
               <Link href="/by-list" className="btn btn-secondary">
                 Купить по списку
@@ -130,7 +125,6 @@ export default async function HomePage() {
                   <strong>{t.title}</strong>
                   <small>{t.hint}</small>
                 </span>
-                <Icon name="arrow" />
               </Link>
             )
           })}
@@ -138,7 +132,7 @@ export default async function HomePage() {
       </section>
 
       <section className="frame categories section-space">
-        <SectionHead num="01" eyebrow="КАТАЛОГ" title="Всё по категориям" />
+        <SectionHead eyebrow="КАТАЛОГ" title="Всё по категориям" />
         <div className="category-grid">
           {categories.map((c, i) => (
             <Link
@@ -146,10 +140,6 @@ export default async function HomePage() {
               href={`/catalog?cat=${encodeURIComponent(c.handle)}`}
               className="category-card"
             >
-              <div className="category-index">
-                {String(i + 1).padStart(2, "0")} /{" "}
-                {String(totalCats).padStart(2, "0")}
-              </div>
               <Image
                 src={categoryImage(c.name, i)}
                 alt=""
@@ -159,9 +149,6 @@ export default async function HomePage() {
               />
               <div className="category-bottom">
                 <h3>{c.name}</h3>
-                <span>
-                  <Icon name="arrow" />
-                </span>
               </div>
             </Link>
           ))}
@@ -170,7 +157,6 @@ export default async function HomePage() {
 
       <section className="frame products section-space">
         <SectionHead
-          num="02"
           eyebrow="ПОПУЛЯРНЫЕ КАТЕГОРИИ"
           title="Начните с нужного товара"
         />
@@ -188,7 +174,7 @@ export default async function HomePage() {
       <section className="frame purchase-paths section-space">
         <div className="section-head">
           <div className="section-head-copy">
-            <span className="eyebrow">03 / ДВА ДОПОЛНИТЕЛЬНЫХ СЦЕНАРИЯ</span>
+            <span className="eyebrow">ДВА ДОПОЛНИТЕЛЬНЫХ СЦЕНАРИЯ</span>
             <h2>Покупайте удобным способом</h2>
             <p>
               Для повседневных покупок — каталог выше. Если материалов много или
@@ -217,7 +203,7 @@ export default async function HomePage() {
               заявка на подбор.
             </p>
             <span className="path-cta">
-              Купить по списку <Icon name="arrow" />
+              Купить по списку
             </span>
           </Link>
           <Link href="/pro" className="path-card pro-card">
@@ -236,7 +222,7 @@ export default async function HomePage() {
               интерфейсе.
             </p>
             <span className="path-cta">
-              Для профессионалов <Icon name="arrow" />
+              Для профессионалов
             </span>
           </Link>
         </div>

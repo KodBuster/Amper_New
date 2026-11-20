@@ -112,38 +112,43 @@ export function SiteHeader() {
         aria-label="Основная навигация"
       >
         <div className="frame nav-wrap">
-          {categories.map((c) => (
-            <Link
-              key={c.id}
-              href={`/catalog?cat=${encodeURIComponent(c.handle)}`}
-              onClick={() => setNavOpen(false)}
-              title={c.name}
-            >
-              {categoryShortName(c.name)}
-            </Link>
-          ))}
+          {/* Много динамических категорий — скролл внутри, без раздувания страницы */}
+          <div className="nav-cats">
+            {categories.map((c) => (
+              <Link
+                key={c.id}
+                href={`/catalog?cat=${encodeURIComponent(c.handle)}`}
+                onClick={() => setNavOpen(false)}
+                title={c.name}
+              >
+                {categoryShortName(c.name)}
+              </Link>
+            ))}
+          </div>
           <span className="nav-spacer" />
-          <Link
-            className="nav-action"
-            href="/by-list"
-            onClick={() => setNavOpen(false)}
-          >
-            По списку электрика
-          </Link>
-          <Link
-            className="nav-action"
-            href="/pro"
-            onClick={() => setNavOpen(false)}
-          >
-            Профессионалам
-          </Link>
-          <Link
-            className="nav-action"
-            href="/account"
-            onClick={() => setNavOpen(false)}
-          >
-            Кабинет
-          </Link>
+          <div className="nav-actions">
+            <Link
+              className="nav-action"
+              href="/by-list"
+              onClick={() => setNavOpen(false)}
+            >
+              По списку электрика
+            </Link>
+            <Link
+              className="nav-action"
+              href="/pro"
+              onClick={() => setNavOpen(false)}
+            >
+              Профессионалам
+            </Link>
+            <Link
+              className="nav-action"
+              href="/account"
+              onClick={() => setNavOpen(false)}
+            >
+              Кабинет
+            </Link>
+          </div>
         </div>
       </nav>
     </header>

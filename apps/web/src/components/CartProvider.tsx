@@ -18,8 +18,13 @@ type CartLine = {
   unit_price?: number
   thumbnail?: string | null
   variant_id?: string
+  product_id?: string
+  handle?: string
+  sku?: string
   /** Единица измерения МойСклад: шт, м… */
   uom?: string
+  /** Остаток на складе; null — без ограничения */
+  availableQty?: number | null
 }
 
 type MedusaCart = {
@@ -33,12 +38,37 @@ type MedusaCart = {
     unit_price?: number
     thumbnail?: string | null
     variant_id?: string
+    product_id?: string
+    product_handle?: string
+    variant_sku?: string
     variant?: {
+      sku?: string | null
+      manage_inventory?: boolean
+      allow_backorder?: boolean
+      inventory_quantity?: number | null
       metadata?: Record<string, unknown> | null
-      product?: { metadata?: Record<string, unknown> | null }
+      product?: {
+        handle?: string
+        metadata?: Record<string, unknown> | null
+      }
     }
-    product?: { metadata?: Record<string, unknown> | null }
+    product?: {
+      handle?: string
+      metadata?: Record<string, unknown> | null
+    }
   }>
+}
+
+function lineAvailableQty(
+  item: NonNullable<MedusaCart["items"]>[number]
+): number | null {
+  const v = item.variant
+  if (!v) return null
+  if (v.manage_inventory === false || v.allow_backorder) return null
+  if (typeof v.inventory_quantity === "number") {
+    return Math.max(0, Math.floor(v.inventory_quantity))
+  }
+  return null
 }
 
 function lineUom(item: NonNullable<MedusaCart["items"]>[number]): string {
@@ -69,14 +99,15 @@ type CartState = {
     phone?: string
     address_1?: string
     city?: string
-  }) => Promise<{ orderId?: string }>
+    fulfillment?: "pickup" | "delivery"
+  }) => Promise<{ orderId?: string; displayId?: number | string }>
 }
 
 const CartContext = createContext<CartState | null>(null)
 
-/** Чтобы в корзине была единица измерения из metadata варианта/товара */
+/** Единица измерения, артикул, handle и остаток для корзины V10.1 */
 const CART_FIELDS =
-  "+items,+items.variant,+items.variant.metadata,+items.product,+items.product.metadata,*items.thumbnail"
+  "+items,+items.variant,+items.variant.sku,+items.variant.metadata,+items.variant.inventory_quantity,+items.variant.manage_inventory,+items.variant.allow_backorder,+items.product,+items.product.handle,+items.product.metadata,*items.thumbnail"
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [id, setId] = useState<string | undefined>()
@@ -101,7 +132,19 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         unit_price: item.unit_price,
         thumbnail: item.thumbnail,
         variant_id: item.variant_id,
+        product_id: item.product_id,
+        handle:
+          item.product_handle ||
+          item.variant?.product?.handle ||
+          item.product?.handle ||
+          undefined,
+        sku:
+          item.variant_sku ||
+          item.variant?.sku ||
+          String(item.variant?.metadata?.moysklad_article || "").trim() ||
+          undefined,
         uom: lineUom(item),
+        availableQty: lineAvailableQty(item),
       }))
     )
     // Medusa 2: суммы корзины в основных единицах валюты (рубли)
@@ -207,9 +250,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       phone?: string
       address_1?: string
       city?: string
+      fulfillment?: "pickup" | "delivery"
     }) => {
       const cart = await ensureCart()
-      await medusa.store.cart.update(cart.id, {
+      const { cart: updated } = await medusa.store.cart.update(cart.id, {
         email: payload.email,
         shipping_address: {
           first_name: payload.first_name,
@@ -219,14 +263,61 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           city: payload.city || "Москва",
           country_code: "ru",
         },
+        billing_address: {
+          first_name: payload.first_name,
+          last_name: payload.last_name,
+          phone: payload.phone,
+          address_1: payload.address_1 || "Самовывоз",
+          city: payload.city || "Москва",
+          country_code: "ru",
+        },
       })
 
-      // На MVP: завершение через store API complete (manual payment/shipping должны быть настроены в регионе)
-      const result = await medusa.store.cart.complete(cart.id)
+      const { shipping_options } =
+        await medusa.store.fulfillment.listCartOptions({
+          cart_id: updated.id,
+        })
+      const options = shipping_options || []
+      if (!options.length) {
+        throw new Error(
+          "Не настроен способ получения заказа. В Admin: Настройки → Locations & Shipping — включите доставку/самовывоз для склада и создайте опцию, либо выполните скрипт ensure-fulfillment."
+        )
+      }
+
+      const wantPickup = payload.fulfillment !== "delivery"
+      const preferred =
+        options.find((o) =>
+          wantPickup
+            ? /самовывоз|pickup/i.test(o.name || "")
+            : /доставк|delivery|shipping/i.test(o.name || "")
+        ) || options[0]
+
+      await medusa.store.cart.addShippingMethod(updated.id, {
+        option_id: preferred.id,
+      })
+
+      // Пока нет эквайринга: системный провайдер «оплата вручную»
+      const fresh = await medusa.store.cart.retrieve(updated.id)
+      await medusa.store.payment.initiatePaymentSession(fresh.cart, {
+        provider_id: "pp_system_default",
+      })
+
+      const result = await medusa.store.cart.complete(updated.id)
+      if ((result as { type?: string }).type === "cart") {
+        const err = (result as { error?: { message?: string } }).error?.message
+        throw new Error(err || "Не удалось оформить заказ.")
+      }
+
       clearCartId()
       applyCart(null)
-      const orderId = (result as { order?: { id?: string } })?.order?.id
-      return { orderId }
+      const order = (result as {
+        order?: { id?: string; display_id?: number | string }
+      })?.order
+      return {
+        orderId: order?.id,
+        // Читаемый номер для покупателя (1, 2, 3…)
+        displayId: order?.display_id,
+      }
     },
     [applyCart, ensureCart]
   )

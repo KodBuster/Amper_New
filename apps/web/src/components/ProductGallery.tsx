@@ -34,9 +34,6 @@ export function ProductGallery({ title, images }: Props) {
           sizes="(max-width:900px) 90vw, 480px"
           className={`view-${index % 4}`}
         />
-        <span className="gallery-stage-number" id="gallery-counter">
-          {index + 1} / {list.length}
-        </span>
       </div>
 
       <div className="gallery-side">

@@ -1,12 +1,16 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { AddToCartButton } from "@/components/AddToCartButton"
+import { BackToCatalog } from "@/components/BackToCatalog"
 import { ProductGallery } from "@/components/ProductGallery"
 import {
+  STORE_PRODUCT_FIELDS,
   formatRub,
   medusa,
   pricePerUomLabel,
   productImageUrls,
+  productInStock,
+  productInventoryQty,
   productPriceRub,
   productUom,
   type StoreProduct,
@@ -27,7 +31,7 @@ export default async function ProductPage({
     const { products } = await medusa.store.product.list({
       handle,
       limit: 1,
-      fields: "+metadata,*variants,*variants.metadata,*images,*thumbnail",
+      fields: STORE_PRODUCT_FIELDS,
     })
     product = products?.[0] as StoreProduct | undefined
   } catch {
@@ -38,6 +42,8 @@ export default async function ProductPage({
 
   const price = productPriceRub(product)
   const uom = productUom(product)
+  const inStock = productInStock(product)
+  const availableQty = productInventoryQty(product)
   const variantId = product.variants?.[0]?.id
   const sku =
     product.variants?.[0]?.sku ||
@@ -60,6 +66,9 @@ export default async function ProductPage({
         <span>/</span>
         <span>{product.title}</span>
       </nav>
+      <div className="product-back-row">
+        <BackToCatalog />
+      </div>
 
       <div className="detail-grid">
         <ProductGallery title={product.title} images={images} />
@@ -77,8 +86,13 @@ export default async function ProductPage({
               {price > 0 ? (
                 <p className="detail-uom">{pricePerUomLabel(uom)}</p>
               ) : null}
+              {!inStock ? (
+                <p className="stock-out">Нет в наличии</p>
+              ) : null}
             </div>
-            {variantId ? <AddToCartButton variantId={variantId} /> : null}
+            {variantId ? (
+              <AddToCartButton variantId={variantId} availableQty={availableQty} />
+            ) : null}
           </div>
 
           <div className="detail-description">

@@ -13,6 +13,8 @@
     "backfill:uom": "medusa exec ./src/scripts/backfill-uom.ts",
     "backfill:categories": "medusa exec ./src/scripts/backfill-categories.ts",
     "fix:inventory": "medusa exec ./src/scripts/fix-inventory-links.ts",
+    "ensure:fulfillment": "medusa exec ./src/scripts/ensure-fulfillment.ts",
+    "assign:shipping-profiles": "medusa exec ./src/scripts/assign-shipping-profiles.ts",
     "sync:stock": "medusa exec ./src/scripts/sync-stock-only.ts",
     "user": "medusa user"
   },
