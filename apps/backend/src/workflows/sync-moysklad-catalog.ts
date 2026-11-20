@@ -689,3 +689,29 @@ export const syncMoyskladCatalogWorkflow = createWorkflow(
     return new WorkflowResponse(result)
   }
 )
+
+const emptySyncInputStep = createStep(
+  "moysklad-sync-stock-empty-input",
+  async () => {
+    return new StepResponse({
+      created: 0,
+      updated: 0,
+      unchanged: 0,
+      skipped: 0,
+      imagesSynced: 0,
+      stockUpdated: 0,
+      stockUnchanged: 0,
+      errors: [] as string[],
+    } satisfies SyncResult)
+  }
+)
+
+/** Только остатки из МойСклад → Medusa (для аварийного выравнивания) */
+export const syncMoyskladStockWorkflow = createWorkflow(
+  "sync-moysklad-stock",
+  () => {
+    const empty = emptySyncInputStep()
+    const result = syncStockStep(empty)
+    return new WorkflowResponse(result)
+  }
+)

@@ -39,7 +39,7 @@ export function AddToCartButton({ variantId, availableQty = null }: Props) {
   return (
     <div className="add-to-cart">
       <button
-        className="btn btn-yellow"
+        className={`btn btn-yellow${outOfStock ? " is-oos" : ""}`}
         type="button"
         disabled={pending || outOfStock || !variantId}
         onClick={onClick}

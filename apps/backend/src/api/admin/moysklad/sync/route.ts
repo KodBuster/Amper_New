@@ -2,7 +2,10 @@ import type {
   AuthenticatedMedusaRequest,
   MedusaResponse,
 } from "@medusajs/framework/http"
-import { syncMoyskladCatalogWorkflow } from "../../../../workflows/sync-moysklad-catalog"
+import {
+  syncMoyskladCatalogWorkflow,
+  syncMoyskladStockWorkflow,
+} from "../../../../workflows/sync-moysklad-catalog"
 import {
   canStartSync,
   getSyncState,
@@ -44,11 +47,11 @@ export const POST = async (
 ) => {
   const body = (req.body || {}) as {
     intervalMinutes?: number
-    action?: "sync" | "settings"
+    action?: "sync" | "settings" | "force-align"
   }
 
   // Сохранение только интервала
-  if (body.action === "settings" || (body.intervalMinutes && body.action !== "sync")) {
+  if (body.action === "settings" || (body.intervalMinutes && body.action !== "sync" && body.action !== "force-align")) {
     if (body.intervalMinutes == null) {
       res.status(400).json({ message: "Укажите intervalMinutes" })
       return
@@ -75,19 +78,64 @@ export const POST = async (
     return
   }
 
+  const forceAlign = body.action === "force-align"
   const scope = req.scope
   const started = markSyncRunning("manual")
 
   res.status(202).json({
-    message: "Синхронизация с МойСклад запущена в фоне",
+    message: forceAlign
+      ? "Принудительное выравнивание по МойСклад запущено (резервы + остатки)"
+      : "Синхронизация с МойСклад запущена в фоне",
     sync: started,
   })
 
   void (async () => {
     try {
-      const { result } = await syncMoyskladCatalogWorkflow(scope).run({})
-      markSyncOk("manual", started.startedAt, (result || {}) as never)
-      console.log("[admin] moysklad sync ok:", result)
+      let reservationsCleared = 0
+      if (forceAlign) {
+        // Крайний случай: сбрасываем локальные резервы Medusa, остатки берём из МС
+        const { Modules } = await import("@medusajs/framework/utils")
+        const inventoryModule = scope.resolve(Modules.INVENTORY) as {
+          listReservationItems?: (
+            filters: Record<string, unknown>,
+            config?: { take?: number; skip?: number }
+          ) => Promise<Array<{ id: string }>>
+          deleteReservationItems?: (ids: string[]) => Promise<unknown>
+        }
+        if (
+          typeof inventoryModule.listReservationItems === "function" &&
+          typeof inventoryModule.deleteReservationItems === "function"
+        ) {
+          for (let skip = 0; ; skip += 200) {
+            const page = await inventoryModule.listReservationItems(
+              {},
+              { take: 200, skip }
+            )
+            if (!page.length) break
+            await inventoryModule.deleteReservationItems(page.map((r) => r.id))
+            reservationsCleared += page.length
+            if (page.length < 200) break
+          }
+        }
+        console.log(
+          `[admin] moysklad force-align: снято резервов ${reservationsCleared}`
+        )
+      }
+
+      const { result } = forceAlign
+        ? await syncMoyskladStockWorkflow(scope).run({})
+        : await syncMoyskladCatalogWorkflow(scope).run({})
+      const merged = {
+        ...(result || {}),
+        reservationsCleared: forceAlign ? reservationsCleared : undefined,
+      }
+      markSyncOk("manual", started.startedAt, merged as never)
+      console.log(
+        forceAlign
+          ? "[admin] moysklad force-align ok:"
+          : "[admin] moysklad sync ok:",
+        merged
+      )
     } catch (e) {
       markSyncError("manual", started.startedAt, (e as Error).message)
       console.error("[admin] moysklad sync failed:", (e as Error).message)

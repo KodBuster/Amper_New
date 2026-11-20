@@ -1,11 +1,12 @@
 "use client"
 
 import Link from "next/link"
-import { FormEvent, useState } from "react"
+import { FormEvent, useEffect, useState } from "react"
 import { Breadcrumbs } from "@/components/Breadcrumbs"
 import { Icon } from "@/components/icons"
 import { PageIntro } from "@/components/PageIntro"
 import { useCart } from "@/components/CartProvider"
+import { useCustomer } from "@/components/CustomerProvider"
 import { formatRub } from "@/lib/medusa"
 
 type FieldKey = "name" | "phone" | "email" | "offerAccepted"
@@ -19,6 +20,7 @@ const EMPTY_FIELDS: Record<FieldKey, string> = {
 
 export default function CheckoutPage() {
   const { items, total, completeCheckout } = useCart()
+  const { customer } = useCustomer()
   const [pending, setPending] = useState(false)
   const [done, setDone] = useState<{
     orderId?: string
@@ -28,6 +30,20 @@ export default function CheckoutPage() {
   const [fieldErrors, setFieldErrors] =
     useState<Record<FieldKey, string>>(EMPTY_FIELDS)
   const [fulfillment, setFulfillment] = useState<"pickup" | "delivery">("pickup")
+
+  const loggedIn = Boolean(customer)
+  const accountName = [customer?.first_name, customer?.last_name]
+    .map((p) => String(p || "").trim())
+    .filter(Boolean)
+    .join(" ")
+
+  // После формы: вверх экрана; blur — чтобы Safari не оставлял зум от поля
+  useEffect(() => {
+    if (!done) return
+    const active = document.activeElement
+    if (active instanceof HTMLElement) active.blur()
+    window.scrollTo(0, 0)
+  }, [done])
 
   function clearField(key: FieldKey) {
     setFieldErrors((prev) =>
@@ -40,18 +56,39 @@ export default function CheckoutPage() {
     name: string
     phone: string
     email: string
+    first_name: string
+    last_name: string
   } {
     const next = { ...EMPTY_FIELDS }
-    const name = String(fd.get("name") || "").trim()
     const phone = String(fd.get("phone") || "").trim()
-    const email = String(fd.get("email") || "").trim()
 
-    if (!name) next.name = "Укажите имя"
-    if (!phone) next.phone = "Укажите телефон"
-    if (!email) next.email = "Укажите email"
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      next.email = "Проверьте формат email"
+    let name = ""
+    let email = ""
+    let first_name = ""
+    let last_name = ""
+
+    if (customer) {
+      // Вошедший: имя и email из кабинета, в форме только телефон
+      email = String(customer.email || "").trim()
+      first_name = String(customer.first_name || "").trim() || "Покупатель"
+      last_name =
+        String(customer.last_name || "").trim() || first_name
+      name = accountName || first_name
+      if (!email) next.email = "В кабинете нет email — обновите профиль"
+    } else {
+      name = String(fd.get("name") || "").trim()
+      email = String(fd.get("email") || "").trim()
+      const parts = name.split(/\s+/)
+      first_name = parts[0] || "Покупатель"
+      last_name = parts.slice(1).join(" ") || first_name
+      if (!name) next.name = "Укажите имя"
+      if (!email) next.email = "Укажите email"
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        next.email = "Проверьте формат email"
+      }
     }
+
+    if (!phone) next.phone = "Укажите телефон"
     if (!fd.get("offerAccepted")) {
       next.offerAccepted = "Отметьте, что ознакомлены с условиями продажи"
     }
@@ -61,23 +98,21 @@ export default function CheckoutPage() {
     if (!ok) {
       setError("Заполните обязательные поля — они отмечены красной рамкой.")
     }
-    return { ok, name, phone, email }
+    return { ok, name, phone, email, first_name, last_name }
   }
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setError("")
     const fd = new FormData(e.currentTarget)
-    const { ok, name, phone, email } = validate(fd)
+    const { ok, phone, email, first_name, last_name } = validate(fd)
     if (!ok) return
 
-    const [first_name, ...rest] = name.split(/\s+/)
-    const last_name = rest.join(" ") || first_name
     setPending(true)
     try {
       const result = await completeCheckout({
         email,
-        first_name: first_name || "Покупатель",
+        first_name,
         last_name,
         phone,
         fulfillment,
@@ -125,7 +160,7 @@ export default function CheckoutPage() {
 
   if (done) {
     return (
-      <div className="frame interior">
+      <div className="frame interior checkout-done-page">
         <div className="form-success checkout-done">
           <div className="success-icon">
             <Icon name="check" />
@@ -143,9 +178,32 @@ export default function CheckoutPage() {
               <> Внутренний код: {done.orderId}.</>
             ) : null}
           </p>
-          <Link href="/catalog" className="btn btn-primary">
-            Продолжить выбор
-          </Link>
+          <div className="checkout-done-actions">
+            <Link href="/catalog" className="btn btn-primary">
+              Продолжить выбор
+            </Link>
+            <Link href="/account" className="btn btn-secondary">
+              Личный кабинет
+            </Link>
+            {done.displayId != null && done.displayId !== "" ? (
+              <Link
+                href="/account"
+                className="checkout-back-cart"
+                onClick={() => {
+                  try {
+                    sessionStorage.setItem(
+                      "amper-lookup-order",
+                      String(done.displayId)
+                    )
+                  } catch {
+                    // ignore
+                  }
+                }}
+              >
+                Найти заказ по номеру
+              </Link>
+            ) : null}
+          </div>
         </div>
       </div>
     )
@@ -162,37 +220,73 @@ export default function CheckoutPage() {
       <PageIntro
         eyebrow="Оформление"
         title="Проверим заказ"
-        lead="Укажите контакты и способ получения. Онлайн-оплата подключится отдельно."
+        lead={
+          loggedIn
+            ? "Осталось указать телефон и способ получения."
+            : "Укажите контакты и способ получения. Онлайн-оплата подключится отдельно."
+        }
       />
 
       <div className="checkout-grid">
         <form className="request-form" onSubmit={onSubmit} noValidate>
           <h2>Данные покупателя</h2>
-          <label className={fieldErrors.name ? "field-invalid" : undefined}>
-            <span className="field-label">
-              Имя <b className="required-mark">*</b>
-            </span>
-            <input
-              name="name"
-              autoComplete="name"
-              required
-              placeholder="Ваше имя"
-              aria-invalid={Boolean(fieldErrors.name)}
-              onChange={() => clearField("name")}
-            />
-            {fieldErrors.name ? (
-              <span className="field-hint">{fieldErrors.name}</span>
-            ) : null}
-          </label>
+          {loggedIn ? (
+            <div className="checkout-account-card">
+              <p className="checkout-account-label">Оформляете как</p>
+              <strong>{accountName || "Покупатель"}</strong>
+              <span>{customer?.email}</span>
+              <Link href="/account" className="checkout-account-link">
+                Кабинет
+              </Link>
+            </div>
+          ) : (
+            <>
+              <label className={fieldErrors.name ? "field-invalid" : undefined}>
+                <span className="field-label">
+                  Имя <b className="required-mark">*</b>
+                </span>
+                <input
+                  name="name"
+                  autoComplete="name"
+                  required
+                  placeholder="Ваше имя"
+                  aria-invalid={Boolean(fieldErrors.name)}
+                  onChange={() => clearField("name")}
+                />
+                {fieldErrors.name ? (
+                  <span className="field-hint">{fieldErrors.name}</span>
+                ) : null}
+              </label>
+              <label className={fieldErrors.email ? "field-invalid" : undefined}>
+                <span className="field-label">
+                  Email <b className="required-mark">*</b>
+                </span>
+                <input
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  placeholder="you@example.com"
+                  aria-invalid={Boolean(fieldErrors.email)}
+                  onChange={() => clearField("email")}
+                />
+                {fieldErrors.email ? (
+                  <span className="field-hint">{fieldErrors.email}</span>
+                ) : null}
+              </label>
+            </>
+          )}
           <label className={fieldErrors.phone ? "field-invalid" : undefined}>
             <span className="field-label">
               Телефон <b className="required-mark">*</b>
             </span>
             <input
+              key={customer?.id || "guest-phone"}
               name="phone"
               type="tel"
               autoComplete="tel"
               required
+              defaultValue={customer?.phone || ""}
               placeholder="+7 999 123-45-67"
               aria-invalid={Boolean(fieldErrors.phone)}
               onChange={() => clearField("phone")}
@@ -200,21 +294,7 @@ export default function CheckoutPage() {
             {fieldErrors.phone ? (
               <span className="field-hint">{fieldErrors.phone}</span>
             ) : null}
-          </label>
-          <label className={fieldErrors.email ? "field-invalid" : undefined}>
-            <span className="field-label">
-              Email <b className="required-mark">*</b>
-            </span>
-            <input
-              name="email"
-              type="email"
-              autoComplete="email"
-              required
-              placeholder="you@example.com"
-              aria-invalid={Boolean(fieldErrors.email)}
-              onChange={() => clearField("email")}
-            />
-            {fieldErrors.email ? (
+            {fieldErrors.email && loggedIn ? (
               <span className="field-hint">{fieldErrors.email}</span>
             ) : null}
           </label>
@@ -301,12 +381,28 @@ export default function CheckoutPage() {
         </form>
 
         <aside className="checkout-summary">
-          <h2>Ваши товары</h2>
+          <div className="checkout-summary-head">
+            <h2>Ваши товары</h2>
+            <span className="checkout-positions">
+              {items.length}{" "}
+              {items.length % 10 === 1 && items.length % 100 !== 11
+                ? "позиция"
+                : items.length % 10 >= 2 &&
+                    items.length % 10 <= 4 &&
+                    (items.length % 100 < 10 || items.length % 100 >= 20)
+                  ? "позиции"
+                  : "позиций"}
+            </span>
+          </div>
           <ul>
             {items.map((item) => (
               <li key={item.id}>
                 <span>
-                  {item.title} × {item.quantity}
+                  {item.title}
+                  <small className="checkout-line-meta">
+                    {item.quantity} {item.uom || "шт"}
+                    {item.sku ? <> · арт. {item.sku}</> : null}
+                  </small>
                 </span>
                 <b>{formatRub((item.unit_price || 0) * item.quantity)}</b>
               </li>
@@ -316,7 +412,7 @@ export default function CheckoutPage() {
             <span>К оплате</span>
             <strong>{formatRub(total)}</strong>
           </div>
-          <Link href="/cart" className="cart-action-link">
+          <Link href="/cart" className="checkout-back-cart">
             Вернуться в корзину
           </Link>
         </aside>

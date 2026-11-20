@@ -29,6 +29,7 @@ type SyncState = {
     imagesSynced?: number
     stockUpdated?: number
     stockUnchanged?: number
+    reservationsCleared?: number
     errors?: string[]
   }
   error?: string
@@ -87,6 +88,22 @@ const MoyskladPage = () => {
     },
   })
 
+  /** Крайний случай: сброс локальных резервов + остатки строго как в МС */
+  const forceAlignMutation = useMutation({
+    mutationFn: () =>
+      sdk.client.fetch<SyncResponse>("/admin/moysklad/sync", {
+        method: "POST",
+        body: { action: "force-align" },
+      }),
+    onSuccess: (res) => {
+      toast.success(res.message || "Выравнивание запущено")
+      queryClient.invalidateQueries({ queryKey: ["moysklad-sync-status"] })
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || "Не удалось запустить выравнивание")
+    },
+  })
+
   const settingsMutation = useMutation({
     mutationFn: (intervalMinutes: number) =>
       sdk.client.fetch<SyncResponse>("/admin/moysklad/sync", {
@@ -102,8 +119,21 @@ const MoyskladPage = () => {
     },
   })
 
-  const running = sync?.status === "running" || runMutation.isPending
+  const running =
+    sync?.status === "running" ||
+    runMutation.isPending ||
+    forceAlignMutation.isPending
   const result = sync?.result
+
+  function confirmForceAlign() {
+    const ok = window.confirm(
+      "Выровнять остатки Medusa по МойСклад?\n\n" +
+        "• снимет локальные резервы на складе Medusa\n" +
+        "• перепишет количества строго как в МойСклад\n\n" +
+        "В МойСклад ничего не пишет. Только для крайних случаев после тестов."
+    )
+    if (ok) forceAlignMutation.mutate()
+  }
 
   function saveInterval() {
     const n = Number(intervalDraft)
@@ -121,18 +151,30 @@ const MoyskladPage = () => {
           <Heading level="h1">МойСклад</Heading>
           <Text size="small" className="text-ui-fg-subtle">
             Умный синк каталога, цен, фото и остатков. Автопрогон по интервалу
-            ниже; кнопка — внеочередной запуск.
+            ниже. «Выровнять» — редкий сброс резервов и остатков строго как в
+            МойСклад (в МС не пишет).
           </Text>
         </div>
-        <Button
-          variant="primary"
-          isLoading={running}
-          disabled={running}
-          onClick={() => runMutation.mutate()}
-        >
-          <CloudArrowDown />
-          Синхронизировать сейчас
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="primary"
+            isLoading={running}
+            disabled={running}
+            onClick={() => runMutation.mutate()}
+          >
+            <CloudArrowDown />
+            Синхронизировать сейчас
+          </Button>
+          <Button
+            variant="danger"
+            isLoading={forceAlignMutation.isPending}
+            disabled={running}
+            onClick={confirmForceAlign}
+          >
+            <ArrowPath />
+            Выровнять по МойСклад
+          </Button>
+        </div>
       </div>
 
       <div className="px-6 py-4 flex flex-col gap-4">
@@ -234,6 +276,9 @@ const MoyskladPage = () => {
             <Stat label="Фото загружено" value={result.imagesSynced} />
             <Stat label="Остатки обновлены" value={result.stockUpdated} />
             <Stat label="Остатки без изменений" value={result.stockUnchanged} />
+            {typeof result.reservationsCleared === "number" ? (
+              <Stat label="Снято резервов" value={result.reservationsCleared} />
+            ) : null}
             <Stat
               label="Сообщений об ошибках"
               value={result.errors?.length || 0}

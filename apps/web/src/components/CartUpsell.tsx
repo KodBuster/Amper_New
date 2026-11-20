@@ -49,7 +49,7 @@ export function CartUpsell({ excludeProductIds = [] }: Props) {
   return (
     <aside className="cart-upsell" aria-label="Дополнительные товары">
       <h2>Добавить к заказу</h2>
-      <p>Товары для дополнительных покупок · прокрутите вниз</p>
+      <p>Часто берут вместе</p>
       <div className="cart-upsell-scroll">
         {products.map((p) => (
           <ProductCard key={p.id} product={p} />

@@ -4,18 +4,33 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { FormEvent, useEffect, useState } from "react"
 import { useCart } from "@/components/CartProvider"
+import { useCustomer } from "@/components/CustomerProvider"
 import { Icon } from "@/components/icons"
 import { Logo } from "@/components/Logo"
 import { categoryShortName, type StoreCategory } from "@/lib/catalog-nav"
 import { medusa } from "@/lib/medusa"
 
+function accountLabel(customer: {
+  first_name?: string | null
+  email: string
+} | null): string {
+  if (!customer) return "Кабинет"
+  const name = String(customer.first_name || "").trim()
+  if (name) return name
+  const email = customer.email || ""
+  const at = email.indexOf("@")
+  return at > 0 ? email.slice(0, at) : email || "Кабинет"
+}
+
 export function SiteHeader() {
   const { items } = useCart()
+  const { customer } = useCustomer()
   const cartCount = items.reduce((sum, i) => sum + i.quantity, 0)
   const router = useRouter()
   const [q, setQ] = useState("")
   const [navOpen, setNavOpen] = useState(false)
   const [categories, setCategories] = useState<StoreCategory[]>([])
+  const cabinetLabel = accountLabel(customer)
 
   useEffect(() => {
     let cancelled = false
@@ -71,11 +86,17 @@ export function SiteHeader() {
         <div className="header-icons">
           <Link
             href="/account"
-            className="head-icon account-trigger"
-            aria-label="Открыть личный кабинет"
+            className={`head-icon account-trigger${customer ? " is-logged-in" : ""}`}
+            aria-label={
+              customer
+                ? `Кабинет: вы вошли как ${cabinetLabel}`
+                : "Открыть личный кабинет"
+            }
+            title={customer ? `Вы вошли · ${customer.email}` : "Личный кабинет"}
           >
             <Icon name="user" />
-            <span>Кабинет</span>
+            <span>{cabinetLabel}</span>
+            {customer ? <i className="account-online-dot" aria-hidden /> : null}
           </Link>
           <Link
             href="/favorites"
@@ -142,11 +163,11 @@ export function SiteHeader() {
               Профессионалам
             </Link>
             <Link
-              className="nav-action"
+              className={`nav-action${customer ? " is-logged-in" : ""}`}
               href="/account"
               onClick={() => setNavOpen(false)}
             >
-              Кабинет
+              {customer ? `Кабинет · ${cabinetLabel}` : "Кабинет"}
             </Link>
           </div>
         </div>

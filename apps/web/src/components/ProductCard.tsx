@@ -4,6 +4,7 @@ import Image from "next/image"
 import Link from "next/link"
 import { useState, type MouseEvent } from "react"
 import { useCart } from "@/components/CartProvider"
+import { useCustomer } from "@/components/CustomerProvider"
 import {
   formatRub,
   pricePerUomLabel,
@@ -15,6 +16,7 @@ import {
   translateInventoryError,
   type StoreProduct,
 } from "@/lib/medusa"
+import { useRouter } from "next/navigation"
 
 /** Иконка корзины как в AMPER A v14.2 */
 function BagIcon() {
@@ -43,8 +45,11 @@ function categoryShort(product: StoreProduct): string {
 
 export function ProductCard({ product }: { product: StoreProduct }) {
   const { addItem } = useCart()
+  const { customer, cabinet, toggleFavorite } = useCustomer()
+  const router = useRouter()
   const [pending, setPending] = useState(false)
   const [stockError, setStockError] = useState("")
+  const [favBusy, setFavBusy] = useState(false)
   const price = productPriceRub(product)
   const uom = productUom(product)
   const inStock = productInStock(product)
@@ -56,6 +61,24 @@ export function ProductCard({ product }: { product: StoreProduct }) {
   const img = productImageUrls(product)[0] || "/assets/photo-product-101.webp"
   const isPlaceholder = !productImageUrls(product).length
   const href = `/product/${product.handle}`
+  const isFav = cabinet.favorites.includes(product.id)
+
+  async function onFavorite(e: MouseEvent<HTMLButtonElement>) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!customer) {
+      router.push("/account")
+      return
+    }
+    setFavBusy(true)
+    try {
+      await toggleFavorite(product.id)
+    } catch {
+      // ignore
+    } finally {
+      setFavBusy(false)
+    }
+  }
 
   async function onAdd(e: MouseEvent<HTMLButtonElement>) {
     e.preventDefault()
@@ -85,14 +108,20 @@ export function ProductCard({ product }: { product: StoreProduct }) {
         {isPlaceholder ? <span>нет фото</span> : null}
       </Link>
 
-      <Link
-        className="fav"
-        href="/favorites"
-        aria-label={`В избранное: ${product.title}`}
-        onClick={(e) => e.stopPropagation()}
+      <button
+        type="button"
+        className={`fav${isFav ? " active" : ""}`}
+        aria-label={
+          isFav
+            ? `Убрать из избранного: ${product.title}`
+            : `В избранное: ${product.title}`
+        }
+        aria-pressed={isFav}
+        disabled={favBusy}
+        onClick={onFavorite}
       >
         <HeartIcon />
-      </Link>
+      </button>
 
       <div className="product-body">
         <small className="product-code">
@@ -109,15 +138,12 @@ export function ProductCard({ product }: { product: StoreProduct }) {
           <div>
             <strong>{price > 0 ? formatRub(price) : "по запросу"}</strong>
             <small>{pricePerUomLabel(uom)}</small>
-            {!inStock ? (
-              <small className="stock-out">Нет в наличии</small>
-            ) : null}
             {stockError ? (
               <small className="stock-out">{stockError}</small>
             ) : null}
           </div>
           <button
-            className="purchase-btn"
+            className={`purchase-btn${!inStock ? " is-oos" : ""}`}
             type="button"
             disabled={!variantId || pending || !inStock}
             onClick={onAdd}
@@ -127,8 +153,10 @@ export function ProductCard({ product }: { product: StoreProduct }) {
                 : `Нет в наличии: ${product.title}`
             }
           >
-            <BagIcon />
-            <span>{pending ? "…" : inStock ? "В корзину" : "Нет"}</span>
+            {inStock ? <BagIcon /> : null}
+            <span>
+              {pending ? "…" : inStock ? "В корзину" : "Нет в наличии"}
+            </span>
           </button>
         </div>
       </div>

@@ -6,12 +6,23 @@ import type MoySkladModuleService from "../modules/moysklad/service"
 /**
  * При оформлении заказа создаём customerorder в МойСклад.
  * Защита от дублей: metadata.moysklad_order_id.
+ *
+ * Запись в МС только при MOYSKLAD_ALLOW_WRITES=true (барьер на время тестов).
  */
 export default async function orderPlacedMoyskladHandler({
   event: { data },
   container,
 }: SubscriberArgs<{ id: string }>) {
   const orderModule = container.resolve(Modules.ORDER)
+
+  // Барьер: без явного разрешения не трогаем МС (и контрагентов тоже)
+  if (process.env.MOYSKLAD_ALLOW_WRITES !== "true") {
+    console.log(
+      `Заказ ${data.id}: выгрузка в МойСклад пропущена (MOYSKLAD_ALLOW_WRITES≠true)`
+    )
+    return
+  }
+
   const moysklad: MoySkladModuleService = container.resolve(MOYSKLAD_MODULE)
   const client = moysklad.getClient()
   const { organizationId, storeId } = await moysklad.resolveDefaults()

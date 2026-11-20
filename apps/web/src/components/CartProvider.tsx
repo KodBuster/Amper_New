@@ -8,8 +8,15 @@ import {
   useMemo,
   useState,
 } from "react"
-import { medusa } from "@/lib/medusa"
-import { clearCartId, getCartId, setCartId } from "@/lib/cart"
+import { medusa, resolveMoyskladUom } from "@/lib/medusa"
+import {
+  clearCartId,
+  getCartId,
+  isCartGoneError,
+  isTransientCartError,
+  setCartId,
+  withCartRetries,
+} from "@/lib/cart"
 
 type CartLine = {
   id: string
@@ -41,6 +48,7 @@ type MedusaCart = {
     product_id?: string
     product_handle?: string
     variant_sku?: string
+    metadata?: Record<string, unknown> | null
     variant?: {
       sku?: string | null
       manage_inventory?: boolean
@@ -72,15 +80,13 @@ function lineAvailableQty(
 }
 
 function lineUom(item: NonNullable<MedusaCart["items"]>[number]): string {
-  const fromVariant = String(item.variant?.metadata?.moysklad_uom || "").trim()
-  if (fromVariant) return fromVariant
-  const fromProduct = String(
-    item.variant?.product?.metadata?.moysklad_uom ||
-      item.product?.metadata?.moysklad_uom ||
-      ""
-  ).trim()
-  if (fromProduct) return fromProduct
-  return "шт"
+  // Тот же порядок, что productUom: товар → вариант (иначе «шт» вместо «м»)
+  return resolveMoyskladUom(
+    item.product?.metadata,
+    item.variant?.product?.metadata,
+    item.variant?.metadata,
+    item.metadata
+  )
 }
 
 type CartState = {
@@ -105,9 +111,9 @@ type CartState = {
 
 const CartContext = createContext<CartState | null>(null)
 
-/** Единица измерения, артикул, handle и остаток для корзины V10.1 */
+/** Нужны product/variant.metadata — иначе uom падает в «шт» */
 const CART_FIELDS =
-  "+items,+items.variant,+items.variant.sku,+items.variant.metadata,+items.variant.inventory_quantity,+items.variant.manage_inventory,+items.variant.allow_backorder,+items.product,+items.product.handle,+items.product.metadata,*items.thumbnail"
+  "*items,*items.metadata,*items.variant,*items.variant.metadata,*items.product,*items.product.metadata,+items.variant.sku,+items.variant.inventory_quantity,+items.variant.manage_inventory,+items.variant.allow_backorder,*items.thumbnail"
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [id, setId] = useState<string | undefined>()
@@ -115,61 +121,164 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
 
-  const applyCart = useCallback((cart: MedusaCart | null | undefined) => {
-    if (!cart?.id) {
-      setId(undefined)
-      setItems([])
-      setTotal(0)
-      return
-    }
-    setId(cart.id)
-    setCartId(cart.id)
-    setItems(
-      (cart.items || []).map((item) => ({
-        id: item.id,
-        title: item.title || item.product_title,
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        thumbnail: item.thumbnail,
-        variant_id: item.variant_id,
-        product_id: item.product_id,
-        handle:
-          item.product_handle ||
-          item.variant?.product?.handle ||
-          item.product?.handle ||
-          undefined,
-        sku:
+  type ProductMetaPatch = { uom: string; article?: string }
+
+  const mapLines = useCallback(
+    (
+      cartItems: NonNullable<MedusaCart["items"]>,
+      metaByProductId?: Record<string, ProductMetaPatch>
+    ): CartLine[] =>
+      cartItems.map((item) => {
+        const patch = item.product_id
+          ? metaByProductId?.[item.product_id]
+          : undefined
+        let uom = lineUom(item)
+        // Если в ответе корзины нет metadata — берём из догрузки товаров
+        if (patch?.uom && (uom === "шт" || !item.product?.metadata?.moysklad_uom)) {
+          uom = patch.uom
+        }
+        const sku =
           item.variant_sku ||
           item.variant?.sku ||
           String(item.variant?.metadata?.moysklad_article || "").trim() ||
-          undefined,
-        uom: lineUom(item),
-        availableQty: lineAvailableQty(item),
-      }))
+          patch?.article ||
+          undefined
+        return {
+          id: item.id,
+          title: item.title || item.product_title,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          thumbnail: item.thumbnail,
+          variant_id: item.variant_id,
+          product_id: item.product_id,
+          handle:
+            item.product_handle ||
+            item.variant?.product?.handle ||
+            item.product?.handle ||
+            undefined,
+          sku,
+          uom,
+          availableQty: lineAvailableQty(item),
+        }
+      }),
+    []
+  )
+
+  /**
+   * Cart API часто не отдаёт product.metadata → «шт» вместо «м», пустой артикул.
+   * Догружаем uom и артикул одним запросом по product_id.
+   */
+  const loadProductMetaByIds = useCallback(
+    async (cartItems: NonNullable<MedusaCart["items"]>) => {
+      const needIds = [
+        ...new Set(
+          cartItems
+            .filter((item) => {
+              if (!item.product_id) return false
+              const hasUom = Boolean(
+                item.product?.metadata?.moysklad_uom ||
+                  item.variant?.product?.metadata?.moysklad_uom ||
+                  item.variant?.metadata?.moysklad_uom ||
+                  item.metadata?.moysklad_uom
+              )
+              const hasArticle = Boolean(
+                item.variant_sku ||
+                  item.variant?.sku ||
+                  item.variant?.metadata?.moysklad_article ||
+                  item.product?.metadata?.moysklad_article
+              )
+              return !hasUom || !hasArticle
+            })
+            .map((item) => item.product_id as string)
+        ),
+      ]
+      if (!needIds.length) return {} as Record<string, ProductMetaPatch>
+
+      try {
+        const { products } = await medusa.store.product.list({
+          id: needIds,
+          limit: needIds.length,
+          fields: "+metadata,*variants,*variants.metadata,+variants.sku",
+        })
+        const map: Record<string, ProductMetaPatch> = {}
+        for (const p of products || []) {
+          const meta = (p as { metadata?: Record<string, unknown> }).metadata
+          const variant = (
+            p as {
+              variants?: Array<{
+                sku?: string | null
+                metadata?: Record<string, unknown> | null
+              }>
+            }
+          ).variants?.[0]
+          const article =
+            String(meta?.moysklad_article || meta?.moysklad_code || "").trim() ||
+            String(variant?.sku || "").trim() ||
+            String(variant?.metadata?.moysklad_article || "").trim() ||
+            undefined
+          map[p.id] = {
+            uom: resolveMoyskladUom(meta, variant?.metadata),
+            article: article || undefined,
+          }
+        }
+        return map
+      } catch {
+        return {}
+      }
+    },
+    []
+  )
+
+  const applyCart = useCallback(
+    async (cart: MedusaCart | null | undefined) => {
+      if (!cart?.id) {
+        setId(undefined)
+        setItems([])
+        setTotal(0)
+        return
+      }
+      setId(cart.id)
+      setCartId(cart.id)
+      const raw = cart.items || []
+      const metaMap = await loadProductMetaByIds(raw)
+      setItems(mapLines(raw, metaMap))
+      // Medusa 2: суммы корзины в основных единицах валюты (рубли)
+      setTotal(Number(cart.total || 0))
+    },
+    [loadProductMetaByIds, mapLines]
+  )
+
+  const fetchCartById = useCallback(async (cartId: string) => {
+    const { cart } = await withCartRetries(() =>
+      medusa.store.cart.retrieve(cartId, { fields: CART_FIELDS })
     )
-    // Medusa 2: суммы корзины в основных единицах валюты (рубли)
-    setTotal(Number(cart.total || 0))
-  }, [])
+    await applyCart(cart)
+    return cart
+  }, [applyCart])
 
   const refresh = useCallback(async () => {
     setLoading(true)
     try {
       const existing = getCartId()
       if (!existing) {
-        applyCart(null)
+        await applyCart(null)
         return
       }
-      const { cart } = await medusa.store.cart.retrieve(existing, {
-        fields: CART_FIELDS,
-      })
-      applyCart(cart)
-    } catch {
-      clearCartId()
-      applyCart(null)
+      await fetchCartById(existing)
+    } catch (err) {
+      // Только «корзины нет» — сбрасываем ID. Сеть/рестарт — оставляем.
+      if (isCartGoneError(err)) {
+        clearCartId()
+        await applyCart(null)
+      } else if (!isTransientCartError(err)) {
+        clearCartId()
+        await applyCart(null)
+      }
+      // При transient: ID в localStorage остаётся, UI не трогаем жёстко
     } finally {
       setLoading(false)
     }
-  }, [applyCart])
+  }, [applyCart, fetchCartById])
 
   useEffect(() => {
     refresh()
@@ -179,13 +288,18 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     const existing = getCartId()
     if (existing) {
       try {
-        const { cart } = await medusa.store.cart.retrieve(existing, {
-          fields: CART_FIELDS,
-        })
-        applyCart(cart)
-        return cart
-      } catch {
-        clearCartId()
+        return await fetchCartById(existing)
+      } catch (err) {
+        if (isCartGoneError(err)) {
+          clearCartId()
+        } else if (isTransientCartError(err)) {
+          // Не создаём новую корзину поверх живой — иначе на мобилке «съест» старую
+          throw new Error(
+            "Не удалось связаться с корзиной. Проверьте сеть и попробуйте ещё раз."
+          )
+        } else {
+          clearCartId()
+        }
       }
     }
     // Регион нужен, чтобы Pricing отдал цену варианта
@@ -194,25 +308,33 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     const { cart } = await medusa.store.cart.create(
       regionId ? { region_id: regionId } : {}
     )
-    applyCart(cart)
+    await applyCart(cart)
     return cart
-  }, [applyCart])
+  }, [applyCart, fetchCartById])
 
-  const retrieveCart = useCallback(async (cartId: string) => {
-    const { cart } = await medusa.store.cart.retrieve(cartId, {
-      fields: CART_FIELDS,
-    })
-    applyCart(cart)
-    return cart
-  }, [applyCart])
+  const retrieveCart = useCallback(
+    async (cartId: string) => fetchCartById(cartId),
+    [fetchCartById]
+  )
 
   const addItem = useCallback(
     async (variantId: string, quantity = 1) => {
       const cart = await ensureCart()
-      await medusa.store.cart.createLineItem(cart.id, {
-        variant_id: variantId,
-        quantity,
-      })
+      const existing = (cart.items || []).find(
+        (line) =>
+          line.variant_id === variantId || line.variant?.id === variantId
+      )
+      // Уже в корзине — увеличиваем количество (createLineItem на том же варианте часто падает)
+      if (existing?.id) {
+        await medusa.store.cart.updateLineItem(cart.id, existing.id, {
+          quantity: (existing.quantity || 0) + quantity,
+        })
+      } else {
+        await medusa.store.cart.createLineItem(cart.id, {
+          variant_id: variantId,
+          quantity,
+        })
+      }
       await retrieveCart(cart.id)
     },
     [ensureCart, retrieveCart]
@@ -253,24 +375,26 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       fulfillment?: "pickup" | "delivery"
     }) => {
       const cart = await ensureCart()
+      // Если покупатель вошёл — привязываем корзину к customer
+      try {
+        await medusa.store.cart.transferCart(cart.id)
+      } catch {
+        // гость или уже привязана
+      }
+      const address = {
+        first_name: payload.first_name,
+        last_name: payload.last_name,
+        phone: payload.phone,
+        email: payload.email,
+        address_1: payload.address_1 || "Самовывоз",
+        city: payload.city || "Москва",
+        country_code: "ru",
+      }
       const { cart: updated } = await medusa.store.cart.update(cart.id, {
         email: payload.email,
-        shipping_address: {
-          first_name: payload.first_name,
-          last_name: payload.last_name,
-          phone: payload.phone,
-          address_1: payload.address_1 || "Самовывоз",
-          city: payload.city || "Москва",
-          country_code: "ru",
-        },
-        billing_address: {
-          first_name: payload.first_name,
-          last_name: payload.last_name,
-          phone: payload.phone,
-          address_1: payload.address_1 || "Самовывоз",
-          city: payload.city || "Москва",
-          country_code: "ru",
-        },
+        // email дублируем в адрес — надёжнее для гостевого поиска заказа
+        shipping_address: address as never,
+        billing_address: address as never,
       })
 
       const { shipping_options } =

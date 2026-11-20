@@ -9,6 +9,9 @@ export const medusa = new Medusa({
   baseUrl: backendUrl,
   publishableKey: process.env.NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY,
   debug: process.env.NODE_ENV === "development",
+  auth: {
+    type: "jwt",
+  },
 })
 
 export type StoreProduct = {
@@ -34,7 +37,11 @@ export type StoreProduct = {
   }>
 }
 
-/** Поля товара для витрины: цена, uom и остаток */
+/**
+ * Поля товара для витрины: цена, uom и остаток.
+ * Без +metadata / *variants.metadata единицы и артикулы МойСклад пропадут
+ * (типичный баг: в корзине «шт» вместо «м»).
+ */
 export const STORE_PRODUCT_FIELDS =
   "+metadata,*variants,*variants.metadata,+variants.inventory_quantity,+variants.manage_inventory,+variants.allow_backorder,*images,*thumbnail"
 
@@ -118,6 +125,17 @@ export function formatRub(amount: number): string {
   }).format(amount)
 }
 
+/** Единица из metadata.moysklad_uom: сначала товар, потом вариант (как на карточке) */
+export function resolveMoyskladUom(
+  ...sources: Array<Record<string, unknown> | null | undefined>
+): string {
+  for (const meta of sources) {
+    const uom = String(meta?.moysklad_uom || "").trim()
+    if (uom) return uom
+  }
+  return "шт"
+}
+
 /** Единица измерения из МойСклад (шт / м / упак…), иначе шт */
 export function productUom(
   product: {
@@ -125,13 +143,10 @@ export function productUom(
     variants?: Array<{ metadata?: Record<string, unknown> | null }>
   } | null | undefined
 ): string {
-  const fromProduct = String(product?.metadata?.moysklad_uom || "").trim()
-  if (fromProduct) return fromProduct
-  const fromVariant = String(
-    product?.variants?.[0]?.metadata?.moysklad_uom || ""
-  ).trim()
-  if (fromVariant) return fromVariant
-  return "шт"
+  return resolveMoyskladUom(
+    product?.metadata,
+    product?.variants?.[0]?.metadata
+  )
 }
 
 /** Подпись цены: «за шт», «за м» */

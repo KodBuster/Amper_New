@@ -1,14 +1,22 @@
 "use client"
 
 import { useRouter } from "next/navigation"
+import { useEffect, useState } from "react"
+import { backLabelFromPath, getPreviousPath } from "@/lib/nav-memory"
 
-/** Назад в каталог: история браузера (фильтры/скролл), иначе /catalog */
+/** Назад по истории (откуда пришли), иначе в каталог */
 export function BackToCatalog({
-  label = "Вернуться к товарам",
+  label,
 }: {
   label?: string
 }) {
   const router = useRouter()
+  const [autoLabel, setAutoLabel] = useState("Вернуться назад")
+
+  useEffect(() => {
+    if (label) return
+    setAutoLabel(backLabelFromPath(getPreviousPath()))
+  }, [label])
 
   function onClick() {
     if (typeof window !== "undefined") {
@@ -32,7 +40,7 @@ export function BackToCatalog({
 
   return (
     <button type="button" className="back-to-catalog" onClick={onClick}>
-      {label}
+      {label || autoLabel}
     </button>
   )
 }

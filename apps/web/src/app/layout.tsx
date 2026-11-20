@@ -1,8 +1,10 @@
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { Manrope, Roboto_Condensed } from "next/font/google"
 import { SiteFooter } from "@/components/SiteFooter"
 import { SiteHeader } from "@/components/SiteHeader"
 import { CartProvider } from "@/components/CartProvider"
+import { CustomerProvider } from "@/components/CustomerProvider"
+import { NavMemory } from "@/components/NavMemory"
 import { ScrollRestoration } from "@/components/ScrollRestoration"
 import "./amper-v14.css"
 import "./globals.css"
@@ -28,15 +30,24 @@ export const metadata: Metadata = {
   icons: { icon: "/assets/favicon.svg" },
 }
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  // Не блокируем зум (доступность); уезд чиним кеглем полей ≥16px
+}
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ru">
       <body className={`variant-a ${manrope.variable} ${robotoCondensed.variable}`}>
         <CartProvider>
-          <ScrollRestoration />
-          <SiteHeader />
-          <main id="app">{children}</main>
-          <SiteFooter />
+          <CustomerProvider>
+            <ScrollRestoration />
+            <NavMemory />
+            <SiteHeader />
+            <main id="app">{children}</main>
+            <SiteFooter />
+          </CustomerProvider>
         </CartProvider>
       </body>
     </html>

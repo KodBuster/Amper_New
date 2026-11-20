@@ -1,8 +1,6 @@
+import { redirect } from "next/navigation"
+
+/** Избранное живёт в кабинете — сразу открываем нужный раздел */
 export default function FavoritesPage() {
-  return (
-    <div className="wrap">
-      <h1 className="page-title">Избранное</h1>
-      <div className="empty-state">Список избранного появится после авторизации покупателя.</div>
-    </div>
-  )
+  redirect("/account?tab=favorites")
 }

@@ -26,11 +26,24 @@ export class MoySkladClient {
     this.token = options.apiToken
   }
 
+  /** Разрешена ли запись в МС (контрагенты, заказы и т.п.). Чтение всегда можно. */
+  private writesAllowed(): boolean {
+    return process.env.MOYSKLAD_ALLOW_WRITES === "true"
+  }
+
   private async request<T>(
     path: string,
     init: RequestInit = {},
     attempt = 1
   ): Promise<T> {
+    const method = String(init.method || "GET").toUpperCase()
+    // Барьер на время тестов: в рабочий МойСклад ничего не создаём/не меняем
+    if (method !== "GET" && method !== "HEAD" && !this.writesAllowed()) {
+      throw new Error(
+        `МойСклад: запись запрещена (MOYSKLAD_ALLOW_WRITES≠true), ${method} ${path}`
+      )
+    }
+
     const url = path.startsWith("http") ? path : `${this.baseUrl}${path.startsWith("/") ? "" : "/"}${path}`
     const res = await fetch(url, {
       ...init,
