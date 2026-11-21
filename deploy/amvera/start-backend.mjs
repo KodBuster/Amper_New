@@ -37,4 +37,7 @@ function run(args) {
 }
 // A single backend replica owns migrations, scheduled sync and local uploads.
 await run(["db:migrate"])
+if (process.env.MEDUSA_ADMIN_EMAIL !== undefined || process.env.MEDUSA_ADMIN_PASSWORD !== undefined) {
+  await run(["exec", "./src/scripts/ensure-admin.js"])
+}
 await run(["start", "--host", "0.0.0.0", "--port", process.env.PORT || "9000"])
