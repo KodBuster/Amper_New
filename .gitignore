@@ -14,6 +14,7 @@ out/
 .env.*.local
 apps/*/.env
 apps/*/.env.local
+deploy/amvera/*.env
 !.env.example
 
 # Локальный статус синка МойСклад

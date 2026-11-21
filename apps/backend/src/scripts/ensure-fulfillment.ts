@@ -105,7 +105,7 @@ export default async function ensureFulfillment({ container }: ExecArgs) {
   }
 
   const existingOptions = await fulfillmentModule.listShippingOptions(
-    { service_zone_id: serviceZoneId },
+    { service_zone: { id: serviceZoneId } },
     { take: 20 }
   )
   const names = new Set(existingOptions.map((o) => o.name))

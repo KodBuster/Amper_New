@@ -19,6 +19,7 @@ import { rootFolderFromPath } from "../modules/moysklad/category-utils"
 import { ensureMoyskladCategories } from "../modules/moysklad/ensure-categories"
 import type MoySkladModuleService from "../modules/moysklad/service"
 import type { MoySkladProduct } from "../modules/moysklad/types"
+import type { MedusaContainer } from "@medusajs/framework/types"
 
 /** Medusa 2 хранит цену в основных единицах валюты (рубли, не копейки) */
 function rubFromKopecks(kopecks: number): number {
@@ -117,7 +118,7 @@ async function uploadMoySkladImages(params: {
  * для товаров без цены создаём через upsertVariantPricesWorkflow.
  */
 async function upsertVariantRubPrice(
-  container: Parameters<typeof upsertVariantPricesWorkflow>[0],
+  container: MedusaContainer,
   variantId: string,
   productId: string,
   kopecks: number,
@@ -131,6 +132,7 @@ async function upsertVariantRubPrice(
     Modules.PRICING,
     "price_set_id"
   )
+  if (!linkService) throw new Error("Product-pricing link module is not available")
   const existing = (await linkService.list(
     { variant_id: [variantId] },
     { select: ["variant_id", "price_set_id"] }
@@ -363,7 +365,7 @@ const syncProductsStep = createStep(
                   products: [
                     {
                       id: found.id,
-                      categories: [{ id: categoryId }],
+                      category_ids: [categoryId],
                     },
                   ],
                 },

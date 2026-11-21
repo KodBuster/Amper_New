@@ -17,7 +17,7 @@ function normEmail(value: string): string {
 
 type OrderRow = {
   id: string
-  display_id?: number
+  display_id?: string | number | null
   email?: string | null
   status?: string
   created_at?: string
@@ -66,7 +66,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
   // Query graph надёжнее отдаёт email заказа, чем listOrders без fields
   const { data } = await query.graph({
     entity: "order",
-    filters: { display_id: displayId },
+    filters: { display_id: String(displayId) },
     fields: [
       "id",
       "display_id",

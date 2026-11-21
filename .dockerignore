@@ -1,0 +1,16 @@
+.git
+**/node_modules
+**/.next
+**/.medusa
+**/.env
+**/.env.*
+**/*.env
+**/data
+**/static
+!apps/web/public/static
+first_entry_point
+*.zip
+tmp
+temp
+**/*.tsbuildinfo
+npm-debug.log*

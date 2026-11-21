@@ -1,0 +1,60 @@
+# Деплой АМПЕР на Amvera
+
+Нужны два приложения (Next.js и Medusa), PostgreSQL 16 и Redis 7. `docker-compose.yml` предназначен только для локальной разработки: Amvera использует Dockerfile, а не Compose.
+
+## 1. Базы и сервер Medusa
+
+1. Создайте PostgreSQL и Redis в Amvera, сохраните строки подключения и включите постоянное хранилище для БД.
+2. Создайте приложение `amper-backend`, загрузите весь репозиторий (контекст Docker — корень).
+3. В конфигурации этого приложения используйте содержимое `deploy/amvera/backend.yml`: Dockerfile `deploy/amvera/backend.Dockerfile`, порт `9000`, постоянное хранилище `/data`.
+4. Корневой `amvera.yml` в GitHub настроен на **витрину**. Для backend держите отдельную deploy-ветку с содержимым `deploy/amvera/backend.yml` в корневом `amvera.yml` и подключите именно эту ветку. При ручной загрузке замените конфигурацию в копии перед загрузкой. Не подключайте backend к автоматическому обновлению ветки с конфигурацией витрины.
+5. Назначьте backend публичный HTTPS-домен. Добавьте переменные и секреты по `deploy/amvera/backend.env.example`. `MEDUSA_BACKEND_URL` — публичный URL backend без завершающего `/`, он используется и для ссылок на фото. Пароль в DATABASE_URL должен быть URL-encoded, если содержит специальные символы.
+6. Сгенерируйте два разных секрета, например `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`. Поместите их в JWT_SECRET и COOKIE_SECRET через раздел секретов Amvera.
+7. Оставьте одну реплику Medusa: запуск выполняет миграции, а синхронизация и локальные фотографии рассчитаны на один экземпляр. Конфигурация включает `singleton: true`, чтобы старый экземпляр остановился перед запуском нового. Перед первым запуском или миграцией существующего магазина сделайте резервную копию PostgreSQL.
+8. После сборки контейнер автоматически выполнит `db:migrate` и запустит production-сервер из `.medusa/server`. Проверка: `https://BACKEND/health` возвращает `OK`, админка доступна по `/app`.
+
+Фотографии хранятся в `/data/static`, состояние синхронизации — в `/data/moysklad`. При переносе существующего магазина загрузите фото из старого `apps/backend/static` в `static` постоянного хранилища, перенесите PostgreSQL и при необходимости исправьте старые URL фото в базе/повторите синхронизацию изображений.
+
+## 2. Первичная настройка магазина
+
+В терминале backend (рабочая папка `/app/apps/backend/.medusa/server`):
+
+```sh
+node /app/node_modules/@medusajs/cli/cli.js user -e YOUR_EMAIL -p YOUR_PASSWORD
+node /app/node_modules/@medusajs/cli/cli.js exec ./src/scripts/seed.js
+```
+
+Seed нужен для новой базы. Для существующей базы используйте её резервную копию вместо повторной инициализации. В админке создайте publishable API key, привяжите его к каналу продаж магазина и скопируйте в настройки витрины. Укажите токен МойСклад в секретах backend. Для первой загрузки каталога:
+
+```sh
+node /app/node_modules/@medusajs/cli/cli.js exec ./src/scripts/sync-moysklad.js
+```
+
+`MOYSKLAD_ALLOW_WRITES=false` оставляет интеграцию в режиме чтения. Включайте `true`, когда требуется передавать реальные заказы в МойСклад. Настройте доставку, оплату и склад в Medusa перед приёмом заказов.
+
+## 3. Витрина Next.js
+
+1. Создайте приложение `amper-web` из всего репозитория. Корневой `amvera.yml` уже выбирает `deploy/amvera/web.Dockerfile`, порт `3000`.
+2. Назначьте HTTPS-домен витрины и добавьте его в STORE_CORS и AUTH_CORS backend.
+3. Укажите переменные из `deploy/amvera/web.env.example`: `MEDUSA_BACKEND_URL` и `MEDUSA_PUBLISHABLE_KEY`. Адрес и ключ читаются сервером при запуске/запросах; в Docker build передавать их не нужно. Токен МойСклад, JWT_SECRET и COOKIE_SECRET витрине не нужны.
+4. Запустите сборку. Next.js собирается в standalone, контейнер запускает `apps/web/server.js` на `0.0.0.0:3000`.
+5. Проверьте `/api/health`, главную, каталог, фото, регистрацию/вход, корзину, оформление и поиск заказа. Запросы браузера идут через `/api/medusa` на домене витрины; маршруты admin и hooks через этот прокси недоступны.
+
+Для фото разрешены HTTPS-домены `*.amvera.tech` с путём `/static/**`. Если backend использует собственный домен, добавьте его в `images.remotePatterns` файла `apps/web/next.config.ts` и пересоберите витрину. В базе не должно оставаться фото с `localhost` или старым LAN IP.
+
+## Локальная проверка Docker
+
+```sh
+docker build -f deploy/amvera/web.Dockerfile -t amper-web .
+docker build -f deploy/amvera/backend.Dockerfile -t amper-backend .
+docker run --rm -p 3000:3000 --env-file deploy/amvera/web.env amper-web
+docker run --rm -p 9000:9000 --env-file deploy/amvera/backend.env -v amper-data:/data amper-backend
+```
+
+Создайте локальные `.env`-файлы из соответствующих `.env.example`, заполните значениями. Не коммитьте секреты. Контейнер backend требует доступные из контейнера PostgreSQL и Redis; `localhost` указывает на сам контейнер.
+
+Сборка Next.js загружает Google Fonts, поэтому сборочному контейнеру нужен доступ к fonts.googleapis.com и fonts.gstatic.com.
+
+После `npm run build --workspace=apps/web` команда `node scripts/test-amvera-web.mjs` проверяет запуск standalone-пакета, главную, CSS и изображения, runtime-настройки прокси, передачу авторизации/тела запроса, блокировку admin/hooks и ответ при недоступном backend. Проверка использует локальный mock API и не создаёт реальные заказы. Для локальной сборки Medusa в этом monorepo задайте `NODE_PATH` равным абсолютному пути `apps/backend/node_modules` (Dockerfile уже делает это).
+
+Документация: [Amvera Docker](https://docs.amvera.ru/applications/configuration/docker.html), [постоянное хранилище](https://docs.amvera.ru/applications/storage.html), [production-деплой Medusa](https://docs.medusajs.com/learn/deployment/general).

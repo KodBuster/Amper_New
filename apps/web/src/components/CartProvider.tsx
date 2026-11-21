@@ -51,14 +51,14 @@ type MedusaCart = {
     metadata?: Record<string, unknown> | null
     variant?: {
       sku?: string | null
-      manage_inventory?: boolean
-      allow_backorder?: boolean
+      manage_inventory?: boolean | null
+      allow_backorder?: boolean | null
       inventory_quantity?: number | null
       metadata?: Record<string, unknown> | null
       product?: {
         handle?: string
         metadata?: Record<string, unknown> | null
-      }
+      } | null
     }
     product?: {
       handle?: string

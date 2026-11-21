@@ -31,7 +31,7 @@ type CustomerState = {
   customer: StoreCustomer | null
   loading: boolean
   cabinet: CustomerCabinetMeta
-  refresh: () => Promise<void>
+  refresh: () => Promise<StoreCustomer | null>
   login: (email: string, password: string) => Promise<void>
   register: (input: {
     email: string

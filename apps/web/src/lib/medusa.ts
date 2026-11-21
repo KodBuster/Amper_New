@@ -1,13 +1,15 @@
 import Medusa from "@medusajs/js-sdk"
 
 const backendUrl =
-  process.env.MEDUSA_BACKEND_URL ||
-  process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL ||
-  "http://localhost:9000"
+  typeof window !== "undefined"
+    ? `${window.location.origin}/api/medusa`
+    : process.env.MEDUSA_BACKEND_URL ||
+      process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL ||
+      "http://localhost:9000"
 
 export const medusa = new Medusa({
   baseUrl: backendUrl,
-  publishableKey: process.env.NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY,
+  publishableKey: process.env.MEDUSA_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY,
   debug: process.env.NODE_ENV === "development",
   auth: {
     type: "jwt",

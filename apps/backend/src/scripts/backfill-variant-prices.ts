@@ -18,6 +18,7 @@ export default async function backfillVariantPrices({ container }: ExecArgs) {
     Modules.PRICING,
     "price_set_id"
   )
+  if (!linkService) throw new Error("Product-pricing link module is not available")
 
   const pageSize = 50
   let updated = 0

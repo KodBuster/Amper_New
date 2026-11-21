@@ -29,7 +29,7 @@ export type MoySkladSyncState = {
 const DEFAULT_INTERVAL = 15
 /** Если «running» дольше — считаем прогон зависшим и разрешаем новый */
 const STALE_RUNNING_MS = 10 * 60 * 1000
-const STATE_FILE = path.join(process.cwd(), "data", "moysklad-sync-state.json")
+const STATE_FILE = path.join(process.env.MOYSKLAD_DATA_DIR || path.join(process.cwd(), "data"), "moysklad-sync-state.json")
 
 let memory: MoySkladSyncState | null = null
 

@@ -84,9 +84,7 @@ export default async function fixInventoryLinks({ container }: ExecArgs) {
     )
     if (!page.length) break
 
-    const toLink: Array<{
-      [key: string]: unknown
-    }> = []
+    const toLink: Parameters<typeof link.create>[0] = []
     const needLevels: string[] = []
 
     for (const v of page) {

@@ -3,10 +3,9 @@ import { loadEnv, defineConfig } from "@medusajs/framework/utils"
 loadEnv(process.env.NODE_ENV || "development", process.cwd())
 
 module.exports = defineConfig({
-  // Admin Vite ломается на пути с скобками вроде C:\(C)BONUS\...
-  // Включите снова после переноса проекта в путь без спецсимволов.
   admin: {
     disable: process.env.MEDUSA_ADMIN_ON !== "1",
+    backendUrl: process.env.MEDUSA_BACKEND_URL,
   },
   projectConfig: {
     databaseUrl: process.env.DATABASE_URL,
@@ -20,6 +19,24 @@ module.exports = defineConfig({
     },
   },
   modules: [
+    ...(process.env.REDIS_URL ? [
+      { resolve: "@medusajs/medusa/event-bus-redis", options: { redisUrl: process.env.REDIS_URL } },
+      { resolve: "@medusajs/medusa/workflow-engine-redis", options: { redis: { redisUrl: process.env.REDIS_URL } } },
+      { resolve: "@medusajs/medusa/cache-redis", options: { redisUrl: process.env.REDIS_URL } },
+    ] : []),
+    {
+      resolve: "@medusajs/medusa/file",
+      options: {
+        providers: [{
+          resolve: "@medusajs/medusa/file-local",
+          id: "local",
+          options: {
+            upload_dir: process.env.MEDUSA_UPLOAD_DIR || "static",
+            backend_url: `${(process.env.MEDUSA_BACKEND_URL || "http://localhost:9000").replace(/\/$/, "")}/static`,
+          },
+        }],
+      },
+    },
     {
       resolve: "./src/modules/moysklad",
       options: {

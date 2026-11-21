@@ -25,17 +25,10 @@ export async function lookupOrder(input: {
   email?: string
   phone?: string
 }): Promise<LookupOrder> {
-  const base =
-    process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL ||
-    process.env.MEDUSA_BACKEND_URL ||
-    "http://localhost:9000"
-  const key = process.env.NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY
-
-  const res = await fetch(`${base.replace(/\/$/, "")}/store/order-lookup`, {
+  const res = await fetch("/api/medusa/store/order-lookup", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...(key ? { "x-publishable-api-key": key } : {}),
     },
     body: JSON.stringify({
       display_id: input.display_id,
