@@ -50,6 +50,17 @@ try {
   assert.equal(page.status, 200)
   const html = await page.text()
   assert.ok(html.includes("АМПЕР"))
+  for (const url of [base, `${base}/about`]) {
+    const document = await (await fetch(url)).text()
+    assert.ok(document.includes("https://mc.yandex.ru/metrika/tag.js?id=114486851"), "Counter must be present on every page")
+    assert.ok(document.includes("https://mc.yandex.ru/watch/114486851"), "No-script tracking pixel must be present")
+    assert.ok(document.includes("/favicon-32x32.png"), "New favicon must be declared")
+  }
+  const favicon = await fetch(`${base}/favicon.ico`)
+  assert.equal(favicon.status, 200)
+  const ico = Buffer.from(await favicon.arrayBuffer())
+  assert.equal(ico.readUInt16LE(2), 1)
+  assert.equal(ico.readUInt16LE(4), 3)
   const css = html.match(/href="([^"\s]+\.css[^"\s]*)"/)
   assert.ok(css, "Homepage must reference CSS")
   assert.equal((await fetch(new URL(css[1], base))).status, 200)
@@ -72,7 +83,7 @@ try {
   assert.equal(received.length, before)
   await new Promise((resolve) => backend.close(resolve))
   assert.equal((await fetch(`${base}/api/medusa/store/products`)).status, 502)
-  console.log("PASS: standalone startup, health, homepage, CSS/assets, runtime backend/key, auth/body/query, status forwarding, blocked admin/hooks, unavailable backend")
+  console.log("PASS: standalone startup, health, homepage, counter on dynamic/static pages, favicon, CSS/assets, runtime backend/key, auth/body/query, status forwarding, blocked admin/hooks, unavailable backend")
 } finally {
   server.kill()
   if (server.exitCode === null) await once(server, "exit")
