@@ -59,7 +59,7 @@ docker run --rm -p 9000:9000 --env-file deploy/amvera/backend.env -v amper-data:
 
 Создайте локальные `.env`-файлы из соответствующих `.env.example`, заполните значениями. Не коммитьте секреты. Контейнер backend требует доступные из контейнера PostgreSQL и Redis; `localhost` указывает на сам контейнер.
 
-Сборка Next.js загружает Google Fonts, поэтому сборочному контейнеру нужен доступ к fonts.googleapis.com и fonts.gstatic.com.
+Шрифты Manrope и Roboto Condensed устанавливаются из npm-пакетов Fontsource и включаются в сборку. При сборке и открытии сайта обращаться к Google Fonts не требуется; поддерживаются кириллица, латиница и переменная толщина начертаний.
 
 После `npm run build --workspace=apps/web` команда `node scripts/test-amvera-web.mjs` проверяет запуск standalone-пакета, главную, CSS и изображения, runtime-настройки прокси, передачу авторизации/тела запроса, блокировку admin/hooks и ответ при недоступном backend. Проверка использует локальный mock API и не создаёт реальные заказы. Для локальной сборки Medusa в этом monorepo задайте `NODE_PATH` равным абсолютному пути `apps/backend/node_modules` (Dockerfile уже делает это).
 
