@@ -1,6 +1,7 @@
 import type {
   MoySkladModuleOptions,
   MoySkladProduct,
+  MoySkladProductFolder,
   MoySkladProductImage,
   MoySkladStockRow,
 } from "./types"
@@ -118,6 +119,13 @@ export class MoySkladClient {
     return this.listAll<MoySkladStockRow>(
       `/report/stock/bystore/current?filter=store=${encoded}&stockMode=all`
     )
+  }
+
+  /** The API excludes archived folders by default; explicitly read both sets. */
+  async listProductFolders(): Promise<MoySkladProductFolder[]> {
+    const active = await this.listAll<MoySkladProductFolder>("/entity/productfolder?filter=archived=false")
+    const archived = await this.listAll<MoySkladProductFolder>("/entity/productfolder?filter=archived=true")
+    return [...active, ...archived]
   }
 
   /** Альтернативный отчёт остатков (если bystore недоступен) */

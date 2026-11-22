@@ -5,6 +5,7 @@ import { cp } from "node:fs/promises"
 import { spawn } from "node:child_process"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { createRequire } from "node:module"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const web = path.join(root, "apps/web")
@@ -12,13 +13,30 @@ const standalone = path.join(web, ".next/standalone/apps/web")
 await cp(path.join(web, "public"), path.join(standalone, "public"), { recursive: true })
 await cp(path.join(web, ".next/static"), path.join(standalone, ".next/static"), { recursive: true })
 const received = []
+const require = createRequire(import.meta.url)
+const categoryQueryConfig = require("../apps/backend/node_modules/@medusajs/medusa/dist/api/store/product-categories/query-config.js")
+const mockCategories = [
+  { id: "cat-root", name: "Электрика", handle: "electrics", parent_category_id: null },
+  { id: "cat-child", name: "Лампы", handle: "lamps", parent_category_id: "cat-root" },
+  ...Array.from({ length: 130 }, (_, index) => ({ id: `leaf-${index}`, name: `Лампы светодиодные ${index}`, handle: `led-${index}`, parent_category_id: "cat-child" })),
+  { id: "orphan", name: "Скрытая ветка", handle: "hidden", parent_category_id: "archived-parent" },
+]
 const backend = createServer(async (request, response) => {
   let body = ""
   for await (const chunk of request) body += chunk
   received.push({ url: request.url, method: request.method, headers: request.headers, body })
   response.setHeader("content-type", "application/json")
   if (request.url.startsWith("/store/products")) return response.end(JSON.stringify({ products: [] }))
-  if (request.url.startsWith("/store/product-categories")) return response.end(JSON.stringify({ product_categories: [] }))
+  if (request.url.startsWith("/store/product-categories")) {
+    const url = new URL(request.url, "http://localhost")
+    const fields = (url.searchParams.get("fields") || "").split(",")
+    if (fields.some((field) => !categoryQueryConfig.defaults.includes(field))) {
+      response.statusCode = 400
+      return response.end(JSON.stringify({ message: "Unsupported category field" }))
+    }
+    const offset = Number(url.searchParams.get("offset") || 0)
+    return response.end(JSON.stringify({ product_categories: mockCategories.slice(offset, offset + 100), count: mockCategories.length }))
+  }
   response.statusCode = request.url.includes("missing") ? 404 : 200
   response.end(JSON.stringify({ echoed: body }))
 })
@@ -65,6 +83,16 @@ try {
   assert.ok(css, "Homepage must reference CSS")
   assert.equal((await fetch(new URL(css[1], base))).status, 200)
   assert.equal((await fetch(`${base}/assets/favicon.svg`)).status, 200)
+  const catalog = await (await fetch(`${base}/catalog?cat=led-129`)).text()
+  assert.ok(catalog.includes("Лампы светодиодные 129"), "Deep categories beyond the first API page must load")
+  assert.ok(catalog.includes("aria-current=\"page\""), "Selected leaf must be active")
+  assert.ok(catalog.includes("aria-expanded=\"true\""), "Ancestors of the selected leaf must open")
+  assert.ok(catalog.includes("/catalog?cat=lamps"), "Breadcrumbs must link the parent")
+  assert.ok(!catalog.includes("Скрытая ветка"), "Orphans below archived parents must not render")
+  assert.ok(received.some((request) => request.url.startsWith("/store/products") && request.url.includes("leaf-129")), "Products must be filtered by selected category")
+  const beforeInvalid = received.filter((request) => request.url.startsWith("/store/products")).length
+  await fetch(`${base}/catalog?cat=hidden`)
+  assert.equal(received.filter((request) => request.url.startsWith("/store/products")).length, beforeInvalid, "Hidden category must not fall back to all products")
   const result = await fetch(`${base}/api/medusa/store/order-lookup?test=runtime`, {
     method: "POST", headers: { "content-type": "application/json", authorization: "Bearer customer-test" }, body: JSON.stringify({ display_id: "123" }),
   })

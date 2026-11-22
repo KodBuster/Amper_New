@@ -8,7 +8,7 @@ import { useCustomer } from "@/components/CustomerProvider"
 import { Icon } from "@/components/icons"
 import { Logo } from "@/components/Logo"
 import { categoryShortName, type StoreCategory } from "@/lib/catalog-nav"
-import { medusa } from "@/lib/medusa"
+import { listStoreCategories } from "@/lib/medusa"
 
 function accountLabel(customer: {
   first_name?: string | null
@@ -34,13 +34,9 @@ export function SiteHeader() {
 
   useEffect(() => {
     let cancelled = false
-    medusa.store.category
-      .list({ limit: 100, fields: "id,name,handle,is_active" })
-      .then(({ product_categories }) => {
+    listStoreCategories(true)
+      .then((list) => {
         if (cancelled) return
-        const list = ((product_categories || []) as StoreCategory[])
-          .filter((c) => (c as { is_active?: boolean }).is_active !== false)
-          .sort((a, b) => a.name.localeCompare(b.name, "ru"))
         setCategories(list)
       })
       .catch(() => {

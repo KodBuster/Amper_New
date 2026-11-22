@@ -55,7 +55,7 @@ export default async function HomePage() {
   const products = await loadProducts()
   let categories: Awaited<ReturnType<typeof listStoreCategories>> = []
   try {
-    categories = await listStoreCategories()
+    categories = await listStoreCategories(true)
   } catch {
     categories = []
   }

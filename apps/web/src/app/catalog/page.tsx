@@ -7,6 +7,7 @@ import { CatalogMobileCategories } from "@/components/CatalogMobileCategories"
 import { Icon } from "@/components/icons"
 import { PageIntro } from "@/components/PageIntro"
 import { ProductCard } from "@/components/ProductCard"
+import { categoryAncestors } from "@/lib/catalog-nav"
 import {
   STORE_PRODUCT_FIELDS,
   listStoreCategories,
@@ -71,8 +72,12 @@ export default async function CatalogPage({
   const activeCat =
     categories.find((c) => c.handle === sp.cat) ||
     categories.find((c) => c.id === sp.cat)
+  const unavailableCategory = Boolean(sp.cat && !activeCat)
+  const ancestors = categoryAncestors(categories, activeCat?.id)
+  const childCategories = categories.filter((category) => (category.parent_category_id || null) === (activeCat?.id || null))
 
   try {
+    if (unavailableCategory) throw new Error("Этот раздел недоступен. Выберите другую категорию.")
     // order по цене через Store API здесь невалиден — сортируем ниже по productPriceRub
     const { products: list } = await medusa.store.product.list({
       limit: SHOW_LIMIT,
@@ -103,7 +108,7 @@ export default async function CatalogPage({
 
   const title = sp.q
     ? "Результаты поиска"
-    : activeCat?.name || "Каталог товаров"
+    : activeCat?.name || (unavailableCategory ? "Раздел недоступен" : "Каталог товаров")
   const lead = sp.q
     ? `По запросу «${sp.q}»`
     : "Выберите категорию и уточните параметры."
@@ -117,7 +122,7 @@ export default async function CatalogPage({
             href:
               activeCat || sp.q ? catalogHref(filterState) : undefined,
           },
-          ...(activeCat ? [{ label: activeCat.name }] : []),
+          ...ancestors.map((category, index) => ({ label: category.name, href: index < ancestors.length - 1 ? catalogHref(filterState, category.handle) : undefined })),
           ...(sp.q && !activeCat ? [{ label: "Поиск" }] : []),
         ]}
       />
@@ -140,6 +145,14 @@ export default async function CatalogPage({
         </aside>
 
         <div className="catalog-content">
+          {childCategories.length > 0 && (
+            <section className="catalog-subcategories" aria-label={activeCat ? "Подкатегории" : "Разделы каталога"}>
+              <h2>{activeCat ? "Подкатегории" : "Разделы каталога"}</h2>
+              <div className="catalog-subcategory-links">
+                {childCategories.map((category) => <Link key={category.id} href={catalogHref(filterState, category.handle)}>{category.name}</Link>)}
+              </div>
+            </section>
+          )}
           <div className="catalog-mobile-sticky">
             <CatalogMobileCategories
               categories={categories}
