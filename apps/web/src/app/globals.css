@@ -1,6 +1,8 @@
 /* Мост Next.js ↔ стили AMPER A v14.2: только то, чего нет в шаблоне */
 
 :root {
+  --font-amper-body: "Manrope Variable";
+  --font-amper-display: "Roboto Condensed Variable";
   --body: var(--font-amper-body), Manrope, "Segoe UI", Arial, sans-serif;
   --display: var(--font-amper-display), "Roboto Condensed", Impact, "Arial Narrow",
     sans-serif;

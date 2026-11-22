@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next"
 import Script from "next/script"
 import { Suspense } from "react"
-import { Manrope, Roboto_Condensed } from "next/font/google"
 import { SiteFooter } from "@/components/SiteFooter"
 import { SiteHeader } from "@/components/SiteHeader"
 import { CartProvider } from "@/components/CartProvider"
@@ -9,23 +8,10 @@ import { CustomerProvider } from "@/components/CustomerProvider"
 import { NavMemory } from "@/components/NavMemory"
 import { ScrollRestoration } from "@/components/ScrollRestoration"
 import { MetrikaPageViews } from "@/components/MetrikaPageViews"
+import "@fontsource-variable/manrope"
+import "@fontsource-variable/roboto-condensed"
 import "./amper-v14.css"
 import "./globals.css"
-
-const manrope = Manrope({
-  subsets: ["latin", "cyrillic"],
-  // Без средних/жирных начертаний мелкий текст выглядит «воздушным»
-  weight: ["500", "600", "700", "800"],
-  variable: "--font-amper-body",
-  display: "swap",
-})
-
-const robotoCondensed = Roboto_Condensed({
-  subsets: ["latin", "cyrillic"],
-  weight: ["600", "700", "800"],
-  variable: "--font-amper-display",
-  display: "swap",
-})
 
 export const metadata: Metadata = {
   title: "АМПЕР — электрика с запасом",
@@ -60,7 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           ym(114486851,'init',{ssr:true,webvisor:true,clickmap:true,ecommerce:"dataLayer",referrer:document.referrer,url:location.href,accurateTrackBounce:true,trackLinks:true});
         `}</Script>
       </head>
-      <body className={`variant-a ${manrope.variable} ${robotoCondensed.variable}`}>
+      <body className="variant-a">
         <noscript>
           <div>
             {/* Tracking pixel must remain a plain image and must not use Next.js optimization. */}
