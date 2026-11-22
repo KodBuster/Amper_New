@@ -1,8 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useRef, useState } from "react"
-import { categoryShortName, type StoreCategory } from "@/lib/catalog-nav"
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
+import { buildCategoryTree, categoryAncestors, type CategoryNode, type StoreCategory } from "@/lib/catalog-nav"
 
 type Filters = { max?: string; sort?: string; stock?: string }
 
@@ -27,6 +27,37 @@ function catalogHref(filters: Filters | undefined, catHandle?: string | null) {
   return qs ? `/catalog?${qs}` : "/catalog"
 }
 
+function CategoryBranch({ node, activeHandle, activeIds, filters, onNavigate, onToggle }: {
+  node: CategoryNode; activeHandle?: string | null; activeIds: Set<string>; filters?: Filters;
+  onNavigate?: () => void; onToggle: () => void;
+}) {
+  const id = useId()
+  const inActivePath = activeIds.has(node.id)
+  const [expanded, setExpanded] = useState(inActivePath)
+  useEffect(() => { if (inActivePath) setExpanded(true) }, [inActivePath, activeHandle])
+  useEffect(onToggle, [expanded, onToggle])
+  return (
+    <li>
+      <div className={`catalog-tree-row${inActivePath ? " in-active-path" : ""}`}>
+        <Link className={activeHandle === node.handle ? "active" : ""} href={catalogHref(filters, node.handle)}
+          title={node.name} aria-current={activeHandle === node.handle ? "page" : undefined} scroll={false} onClick={onNavigate}>
+          {node.name}
+        </Link>
+        {node.children.length > 0 && (
+          <button type="button" className="catalog-tree-toggle" aria-label={`${expanded ? "Свернуть" : "Раскрыть"}: ${node.name}`}
+            aria-expanded={expanded} aria-controls={id} onClick={() => setExpanded((value) => !value)}>
+            <span aria-hidden="true">{expanded ? "−" : "+"}</span>
+          </button>
+        )}
+      </div>
+      {node.children.length > 0 && <ul id={id} hidden={!expanded} className="catalog-tree-children">
+        {node.children.map((child) => <CategoryBranch key={child.id} node={child} activeHandle={activeHandle} activeIds={activeIds}
+          filters={filters} onNavigate={onNavigate} onToggle={onToggle} />)}
+      </ul>}
+    </li>
+  )
+}
+
 /** Список категорий + слева тонкий индикатор позиции прокрутки (не нативный скроллбар) */
 export function CatalogCategoryNav({
   categories,
@@ -37,6 +68,8 @@ export function CatalogCategoryNav({
 }: Props) {
   const listRef = useRef<HTMLElement>(null)
   const [rail, setRail] = useState({ show: false, thumbTop: 0, thumbH: 24 })
+  const tree = useMemo(() => buildCategoryTree(categories), [categories])
+  const activeIds = new Set(categoryAncestors(categories, categories.find((category) => category.handle === activeHandle)?.id).map((category) => category.id))
 
   const syncRail = useCallback(() => {
     const el = listRef.current
@@ -94,18 +127,10 @@ export function CatalogCategoryNav({
         >
           Все товары
         </Link>
-        {categories.map((c) => (
-          <Link
-            key={c.id}
-            className={activeHandle === c.handle ? "active" : ""}
-            href={catalogHref(filters, c.handle)}
-            title={c.name}
-            scroll={false}
-            onClick={onNavigate}
-          >
-            {categoryShortName(c.name)}
-          </Link>
-        ))}
+        <ul className="catalog-category-tree">
+          {tree.map((node) => <CategoryBranch key={node.id} node={node} activeHandle={activeHandle} activeIds={activeIds}
+            filters={filters} onNavigate={onNavigate} onToggle={syncRail} />)}
+        </ul>
       </nav>
       {/* Визуальный рельс слева: мобилка / планшет; на широком десктопе скрыт CSS */}
       <div

@@ -25,6 +25,15 @@ export type MoySkladProductImage = {
 }
 
 /** Товар из JSON API 1.2 МойСклад */
+export type MoySkladFolderRef = { id?: string; meta?: { href?: string } }
+export type MoySkladProductFolder = {
+  id: string
+  name: string
+  pathName?: string
+  archived?: boolean
+  productFolder?: MoySkladFolderRef
+}
+
 export type MoySkladProduct = {
   id: string
   name: string
@@ -33,6 +42,7 @@ export type MoySkladProduct = {
   code?: string
   pathName?: string
   archived?: boolean
+  productFolder?: MoySkladFolderRef
   /** Момент последнего изменения в МойСклад (для умного синка) */
   updated?: string
   /** В списке приходит только meta.size; сами файлы — отдельным запросом */

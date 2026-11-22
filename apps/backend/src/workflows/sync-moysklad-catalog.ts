@@ -179,14 +179,11 @@ const syncProductsStep = createStep(
 
     await moysklad.resolveDefaults()
     const client = moysklad.getClient()
-    const products = await client.listProducts(false)
-
-    // Категории витрины = корневые папки МойСклад (добавление/удаление папок → меню)
-    const rootNames = products.map((p) => rootFolderFromPath(p.pathName))
-    const { byRootName: categoryByRoot } = await ensureMoyskladCategories(
-      container as never,
-      rootNames
-    )
+    // Read complete source snapshots before changing visibility in Medusa.
+    const sourceProducts = await client.listProducts(false)
+    const folders = await client.listProductFolders()
+    const { tree, categoryIdsForProduct } = await ensureMoyskladCategories(container, folders)
+    const products = sourceProducts.filter((product) => tree.isVisible(product))
 
     const byMsId = new Map<
       string,
@@ -225,6 +222,18 @@ const syncProductsStep = createStep(
     let imagesSynced = 0
     const errors: string[] = []
 
+    const visibleSourceIds = new Set(products.map((product) => product.id))
+    for (const [msId, product] of byMsId) {
+      if (visibleSourceIds.has(msId)) continue
+      if (product.status === "draft" && product.metadata?.moysklad_hidden === "1") continue
+      // Archived/deleted products and products under archived folders must stop being purchasable.
+      // Do not delete records: carts and historical orders can still reference them.
+      await productModule.updateProducts(product.id, {
+        status: "draft",
+        metadata: { ...product.metadata, moysklad_hidden: "1" },
+      })
+    }
+
     for (const ms of products) {
       try {
         const handle = moysklad.toHandle(ms)
@@ -232,16 +241,15 @@ const syncProductsStep = createStep(
         const amount = moysklad.pickSalePriceKopecks(ms)
         const uom = moysklad.pickUomName(ms)
         const rootFolder = rootFolderFromPath(ms.pathName)
-        const categoryId = rootFolder
-          ? categoryByRoot.get(rootFolder)
-          : undefined
+        const categoryIds = categoryIdsForProduct(ms)
         const found = byMsId.get(ms.id)
         let productId = found?.id
         const msImageCount = ms.images?.meta?.size || 0
         const syncFp = buildProductFp(ms, amount, sku, uom)
 
         if (found) {
-          const meta = (found.metadata || {}) as Record<string, string>
+          const wasHidden = found.metadata?.moysklad_hidden === "1"
+          const meta = { ...found.metadata, moysklad_hidden: "" } as Record<string, string>
           const medusaImageCount = Math.max(
             found.images?.length || 0,
             found.thumbnail ? 1 : 0
@@ -263,15 +271,15 @@ const syncProductsStep = createStep(
           const currentCatIds = (
             (found as { categories?: Array<{ id: string }> }).categories || []
           ).map((c) => c.id)
-          const categorizedOk =
-            !categoryId || currentCatIds.includes(categoryId)
+          const categorizedOk = currentCatIds.length === categoryIds.length && categoryIds.every((id) => currentCatIds.includes(id))
 
           // Карточка не менялась, цена/категория на месте, фото ок — пропускаем
           if (
             meta.moysklad_sync_fp === syncFp &&
             !imagesIncomplete &&
             pricedOk &&
-            categorizedOk
+            categorizedOk &&
+            !wasHidden
           ) {
             unchanged += 1
             continue
@@ -313,7 +321,8 @@ const syncProductsStep = createStep(
             coreChanged ||
             meta.moysklad_sync_fp !== syncFp ||
             !pricedOk ||
-            !categorizedOk
+            !categorizedOk ||
+            wasHidden
           ) {
             if (variant) {
               const vMeta = (variant.metadata || {}) as Record<string, string>
@@ -343,6 +352,7 @@ const syncProductsStep = createStep(
             }
 
             await productModule.updateProducts(found.id, {
+              ...(wasHidden ? { status: "published" as const } : {}),
               title: ms.name,
               description: ms.description || found.description || undefined,
               metadata: {
@@ -359,13 +369,13 @@ const syncProductsStep = createStep(
               },
             })
 
-            if (categoryId && !categorizedOk) {
+            if (!categorizedOk) {
               await updateProductsWorkflow(container).run({
                 input: {
                   products: [
                     {
                       id: found.id,
-                      category_ids: [categoryId],
+                      category_ids: categoryIds,
                     },
                   ],
                 },
@@ -444,7 +454,7 @@ const syncProductsStep = createStep(
             sales_channels: defaultChannelId
               ? [{ id: defaultChannelId }]
               : undefined,
-            categories: categoryId ? [{ id: categoryId }] : undefined,
+            categories: categoryIds.map((id) => ({ id })),
             variants: [
               {
                 title: ms.name,

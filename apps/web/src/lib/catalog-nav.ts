@@ -5,6 +5,49 @@ export type StoreCategory = {
   name: string
   handle: string
   is_active?: boolean
+  is_internal?: boolean
+  parent_category_id?: string | null
+}
+
+export type CategoryNode = StoreCategory & { children: CategoryNode[] }
+
+/** Filter orphans too: children of an inactive category must never become roots. */
+export function visibleCategories(categories: StoreCategory[]): StoreCategory[] {
+  const byId = new Map(categories.map((category) => [category.id, category]))
+  return categories.filter((category) => {
+    const seen = new Set<string>()
+    let current: StoreCategory | undefined = category
+    while (current) {
+      if (seen.has(current.id) || current.is_active === false || current.is_internal) return false
+      seen.add(current.id)
+      if (!current.parent_category_id) return true
+      current = byId.get(current.parent_category_id)
+    }
+    return false
+  }).sort((a, b) => a.name.localeCompare(b.name, "ru"))
+}
+
+export function buildCategoryTree(categories: StoreCategory[]): CategoryNode[] {
+  const nodes = new Map(visibleCategories(categories).map((category) => [category.id, { ...category, children: [] as CategoryNode[] }]))
+  const roots: CategoryNode[] = []
+  for (const node of nodes.values()) {
+    if (node.parent_category_id) nodes.get(node.parent_category_id)?.children.push(node)
+    else roots.push(node)
+  }
+  return roots
+}
+
+export function categoryAncestors(categories: StoreCategory[], id?: string): StoreCategory[] {
+  const byId = new Map(categories.map((category) => [category.id, category]))
+  const result: StoreCategory[] = []
+  const seen = new Set<string>()
+  let current = id ? byId.get(id) : undefined
+  while (current && !seen.has(current.id)) {
+    seen.add(current.id)
+    result.unshift(current)
+    current = current.parent_category_id ? byId.get(current.parent_category_id) : undefined
+  }
+  return result
 }
 
 /** Картинки для сетки на главной — подбираем по словам в названии папки МС */

@@ -1,4 +1,5 @@
 import Medusa from "@medusajs/js-sdk"
+import { visibleCategories, type StoreCategory } from "./catalog-nav"
 
 const backendUrl =
   typeof window !== "undefined"
@@ -157,20 +158,20 @@ export function pricePerUomLabel(uom: string): string {
   return `за ${unit}`
 }
 
-export type StoreCategoryRow = {
-  id: string
-  name: string
-  handle: string
-  is_active?: boolean
-}
+export type StoreCategoryRow = StoreCategory
 
 /** Активные категории витрины (из папок МойСклад) */
-export async function listStoreCategories(): Promise<StoreCategoryRow[]> {
-  const { product_categories } = await medusa.store.category.list({
-    limit: 100,
-    fields: "id,name,handle,is_active",
-  })
-  return ((product_categories || []) as StoreCategoryRow[])
-    .filter((c) => c.is_active !== false)
-    .sort((a, b) => a.name.localeCompare(b.name, "ru"))
+export async function listStoreCategories(rootsOnly = false): Promise<StoreCategoryRow[]> {
+  const categories: StoreCategory[] = []
+  for (let offset = 0; ; offset += 100) {
+    const { product_categories, count } = await medusa.store.category.list({
+      limit: 100, offset,
+      fields: "id,name,handle,parent_category_id",
+    })
+    const page = (product_categories || []) as StoreCategory[]
+    categories.push(...page)
+    if (page.length < 100 || (typeof count === "number" && categories.length >= count)) break
+  }
+  const visible = visibleCategories(categories)
+  return rootsOnly ? visible.filter((category) => !category.parent_category_id) : visible
 }
