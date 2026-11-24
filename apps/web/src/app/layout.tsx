@@ -14,7 +14,7 @@ import "./amper-v14.css"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "АМПЕР — электрика с запасом",
+  title: "АМПЕР — кабель, розетки, автоматика, освещение, инструмент и крепёж — для дома и профессионального монтажа",
   description: "Интернет-магазин электротоваров АМПЕР.",
   icons: {
     icon: [
