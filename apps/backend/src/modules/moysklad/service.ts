@@ -164,6 +164,7 @@ class MoySkladModuleService {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "")
       .slice(0, 120)
+      .replace(/-+$/, "") || product.id
   }
 
   /** SKU: код МойСклад уникален чаще артикула */
