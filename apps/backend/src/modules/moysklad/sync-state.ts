@@ -106,7 +106,8 @@ function readDisk(): MoySkladSyncState {
           trigger: raw.trigger,
           startedAt: raw.startedAt,
           finishedAt,
-          nextDueAt: computeNextDueAt(finishedAt, intervalMinutes),
+          // Сразу «пора»: не ждать полный interval и не висеть на мёртвом lock.
+          nextDueAt: finishedAt,
           result: raw.result,
           lastStockSyncAt: raw.lastStockSyncAt,
           lastStockDurationMs: raw.lastStockDurationMs,
@@ -240,10 +241,15 @@ export function canStartSync(): boolean {
 /**
  * Нужен ли автопрогон по интервалу.
  * Job дергается каждую минуту и сам решает.
+ * Источник правды — nextDueAt (совпадает с подписью в админке).
  */
 export function shouldRunScheduledSync(now = Date.now()): boolean {
   const s = getSyncState()
   if (s.status === "running") return false
+  if (s.nextDueAt) {
+    const due = new Date(s.nextDueAt).getTime()
+    if (Number.isFinite(due)) return now >= due
+  }
   if (!s.finishedAt && !s.startedAt) return true
   const last = new Date(s.finishedAt || s.startedAt || 0).getTime()
   if (!Number.isFinite(last)) return true
