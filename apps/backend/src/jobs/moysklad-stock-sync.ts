@@ -82,24 +82,12 @@ export default async function moyskladStockSyncJob(
       return
     }
 
-    // Тихие пустые прогоны не засоряют журнал на месяц
-    const noteworthy =
-      normalized.length > 0 ||
-      (result.stockUpdated || 0) > 0 ||
-      durationMs >= 5000
+    // 2-мин страховка: в журнал только ошибки (ниже / markStockSyncError).
+    // Успех — шум; «жива ли» видно на странице МойСклад.
     markStockSyncOk({
       durationMs,
       startedAt,
-      log: noteworthy,
-      summary:
-        normalized.length === 0
-          ? "Страховка остатков: без изменений"
-          : `Страховка остатков: ${normalized.length} поз.`,
-      stats: {
-        changed: normalized.length,
-        stockUpdated: result.stockUpdated,
-        stockUnchanged: result.stockUnchanged,
-      },
+      log: false,
     })
     console.log("[job] moysklad stock sync:", {
       changed: normalized.length,

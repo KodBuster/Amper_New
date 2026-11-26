@@ -70,6 +70,7 @@ type SearchReindexResponse = {
 const TRIGGER_LABEL: Record<string, string> = {
   manual: "вручную",
   schedule: "по расписанию",
+  nightly: "ночной",
   cli: "из консоли",
   webhook: "webhook",
 }

@@ -46,9 +46,9 @@ const KIND_LABEL: Record<OpsLogKind | "all", string> = {
 const TRIGGER_LABEL: Record<string, string> = {
   manual: "вручную",
   schedule: "по расписанию",
+  nightly: "ночной",
   cli: "из консоли",
   webhook: "webhook",
-  nightly: "ночной",
 }
 
 function fmt(iso?: string) {
@@ -69,8 +69,28 @@ function fmtDuration(ms?: number) {
   return `${m} мин ${s.toString().padStart(2, "0")} с`
 }
 
+const LOG_RULES: Array<{ what: string; when: string }> = [
+  {
+    what: "Ручные операции (синк, выравнивание, пересборка поиска)",
+    when: "всегда",
+  },
+  {
+    what: "Ночной тяжёлый каталог и ночной поиск",
+    when: "всегда",
+  },
+  {
+    what: "Период каталога (~15 мин)",
+    when: "ошибка всегда; успех — только если были изменения",
+  },
+  {
+    what: "Страховка остатков (~2 мин)",
+    when: "только ошибки (успех без шума — смотри «последняя сверка» на МойСклад)",
+  },
+]
+
 const MoyskladLogsPage = () => {
   const [kind, setKind] = useState<"all" | OpsLogKind>("all")
+  const [showRules, setShowRules] = useState(false)
 
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ["moysklad-ops-log", kind],
@@ -178,6 +198,12 @@ const MoyskladLogsPage = () => {
         <div className="flex items-center gap-2 flex-wrap">
           <Button
             variant="secondary"
+            onClick={() => setShowRules((v) => !v)}
+          >
+            {showRules ? "Скрыть инструкцию" : "Что пишется в журнал"}
+          </Button>
+          <Button
+            variant="secondary"
             disabled={!entries.length}
             onClick={() => void copyLogText()}
           >
@@ -199,6 +225,38 @@ const MoyskladLogsPage = () => {
           </Button>
         </div>
       </div>
+
+      {showRules ? (
+        <div className="mx-6 rounded-lg border border-ui-border-base p-4 flex flex-col gap-3">
+          <Text weight="plus">Что пишется в журнал</Text>
+          <Text size="small" className="text-ui-fg-subtle">
+            Хранение: последние {retention} дней (потолок по числу записей). Цель —
+            фиксировать важные запуски и ошибки, без шума каждые 2 минуты.
+          </Text>
+          <div className="rounded-md border border-ui-border-base overflow-auto">
+            <Table>
+              <Table.Header>
+                <Table.Row>
+                  <Table.HeaderCell>Вид операции</Table.HeaderCell>
+                  <Table.HeaderCell>В журнал</Table.HeaderCell>
+                </Table.Row>
+              </Table.Header>
+              <Table.Body>
+                {LOG_RULES.map((row) => (
+                  <Table.Row key={row.what}>
+                    <Table.Cell>
+                      <Text size="small">{row.what}</Text>
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Text size="small">{row.when}</Text>
+                    </Table.Cell>
+                  </Table.Row>
+                ))}
+              </Table.Body>
+            </Table>
+          </div>
+        </div>
+      ) : null}
 
       <div className="px-6 flex items-center gap-3 flex-wrap">
         <Text size="small" className="text-ui-fg-subtle">

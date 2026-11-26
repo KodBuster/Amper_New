@@ -2,7 +2,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { appendOpsLog } from "./ops-log"
 
-export type SyncTrigger = "manual" | "schedule" | "cli" | "webhook"
+export type SyncTrigger = "manual" | "schedule" | "nightly" | "cli" | "webhook"
 
 export type SyncRunResult = {
   created?: number
@@ -342,29 +342,51 @@ export function markSyncOk(
     lastStockSyncAt: finishedAt,
   })
   const kind = logOpts?.kind || "catalog"
-  appendOpsLog({
-    kind,
-    status: "ok",
-    trigger,
-    startedAt,
-    finishedAt,
-    durationMs,
-    summary:
-      logOpts?.summary ||
-      (kind === "force-align"
-        ? "Выравнивание по МойСклад"
-        : "Синхронизация каталога"),
-    stats: {
-      created: result.created,
-      updated: result.updated,
-      unchanged: result.unchanged,
-      imagesSynced: result.imagesSynced,
-      stockUpdated: result.stockUpdated,
-      hidden: result.hidden,
-      reservationsCleared: result.reservationsCleared,
-      errors: result.errors?.length,
-    },
-  })
+  // Ручной / ночной / cli / webhook / выравнивание — всегда.
+  // Периодический schedule (15 мин) — только если были реальные изменения
+  // (иначе ~2880 строк/месяц шума «unchanged»).
+  const noteworthy =
+    (result.created || 0) +
+      (result.updated || 0) +
+      (result.hidden || 0) +
+      (result.imagesSynced || 0) +
+      (result.stockUpdated || 0) +
+      (result.reservationsCleared || 0) +
+      (result.errors?.length || 0) >
+    0
+  const alwaysLog =
+    trigger === "manual" ||
+    trigger === "nightly" ||
+    trigger === "cli" ||
+    trigger === "webhook" ||
+    kind === "force-align"
+  if (alwaysLog || noteworthy) {
+    appendOpsLog({
+      kind,
+      status: "ok",
+      trigger,
+      startedAt,
+      finishedAt,
+      durationMs,
+      summary:
+        logOpts?.summary ||
+        (kind === "force-align"
+          ? "Выравнивание по МойСклад"
+          : trigger === "nightly"
+            ? "Ночной полный синк каталога"
+            : "Синхронизация каталога"),
+      stats: {
+        created: result.created,
+        updated: result.updated,
+        unchanged: result.unchanged,
+        imagesSynced: result.imagesSynced,
+        stockUpdated: result.stockUpdated,
+        hidden: result.hidden,
+        reservationsCleared: result.reservationsCleared,
+        errors: result.errors?.length,
+      },
+    })
+  }
   return saved
 }
 
