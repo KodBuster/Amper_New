@@ -1,5 +1,6 @@
 import fs from "node:fs"
 import path from "node:path"
+import { appendOpsLog } from "../moysklad/ops-log"
 
 export type SearchReindexTrigger = "manual" | "schedule" | "cli"
 
@@ -124,7 +125,8 @@ export function markSearchReindexOk(input: {
     0,
     new Date(finishedAt).getTime() - new Date(input.startedAt).getTime()
   )
-  return saveSearchReindexState({
+  const trigger = getSearchReindexState().trigger
+  const saved = saveSearchReindexState({
     status: "ok",
     finishedAt,
     durationMs,
@@ -132,6 +134,16 @@ export function markSearchReindexOk(input: {
     jobId: input.jobId,
     error: undefined,
   })
+  appendOpsLog({
+    kind: "search-reindex",
+    status: "ok",
+    trigger,
+    startedAt: input.startedAt,
+    finishedAt,
+    durationMs,
+    summary: `Поиск: ${(input.indexes || ["product"]).join(", ")}`,
+  })
+  return saved
 }
 
 export function markSearchReindexError(
@@ -143,12 +155,24 @@ export function markSearchReindexError(
     0,
     new Date(finishedAt).getTime() - new Date(startedAt).getTime()
   )
-  return saveSearchReindexState({
+  const trigger = getSearchReindexState().trigger
+  const saved = saveSearchReindexState({
     status: "error",
     finishedAt,
     durationMs,
     error,
   })
+  appendOpsLog({
+    kind: "search-reindex",
+    status: "error",
+    trigger,
+    startedAt,
+    finishedAt,
+    durationMs,
+    summary: "Пересборка поиска",
+    error,
+  })
+  return saved
 }
 
 export function canStartSearchReindex(): boolean {
