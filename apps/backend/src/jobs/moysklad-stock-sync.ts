@@ -26,7 +26,8 @@ export default async function moyskladStockSyncJob(
   const lock = await acquireSyncLock(container, "stock", 10 * 60 * 1000)
   if (!lock) return
 
-  const startedAt = Date.now()
+  const startedMs = Date.now()
+  const startedAt = new Date(startedMs).toISOString()
   try {
     const state = getSyncState()
     const moysklad: MoySkladModuleService = container.resolve(MOYSKLAD_MODULE)
@@ -70,21 +71,46 @@ export default async function moyskladStockSyncJob(
     }))
 
     const result = await applyMoyskladStockRows(container, normalized)
-    const durationMs = Date.now() - startedAt
+    const durationMs = Date.now() - startedMs
     if (result.errors.length) {
-      markStockSyncError(result.errors.slice(0, 3).join("; "))
+      markStockSyncError(result.errors.slice(0, 3).join("; "), {
+        durationMs,
+        startedAt,
+        summary: "Страховка остатков",
+      })
       console.error("[job] moysklad stock sync partial errors:", result.errors)
       return
     }
 
-    markStockSyncOk({ durationMs })
+    // Тихие пустые прогоны не засоряют журнал на месяц
+    const noteworthy =
+      normalized.length > 0 ||
+      (result.stockUpdated || 0) > 0 ||
+      durationMs >= 5000
+    markStockSyncOk({
+      durationMs,
+      startedAt,
+      log: noteworthy,
+      summary:
+        normalized.length === 0
+          ? "Страховка остатков: без изменений"
+          : `Страховка остатков: ${normalized.length} поз.`,
+      stats: {
+        changed: normalized.length,
+        stockUpdated: result.stockUpdated,
+        stockUnchanged: result.stockUnchanged,
+      },
+    })
     console.log("[job] moysklad stock sync:", {
       changed: normalized.length,
       durationMs,
       ...result,
     })
   } catch (error) {
-    markStockSyncError((error as Error).message)
+    markStockSyncError((error as Error).message, {
+      durationMs: Date.now() - startedMs,
+      startedAt,
+    })
     console.error(
       "[job] moysklad stock sync failed:",
       (error as Error).message

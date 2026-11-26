@@ -1,5 +1,6 @@
 import fs from "node:fs"
 import path from "node:path"
+import { appendOpsLog } from "./ops-log"
 
 export type SyncTrigger = "manual" | "schedule" | "cli" | "webhook"
 
@@ -118,6 +119,19 @@ function readDisk(): MoySkladSyncState {
             "Предыдущая синхронизация оборвалась при перезапуске backend. Запустите её снова.",
         }
         writeDisk(interrupted)
+        try {
+          appendOpsLog({
+            kind: "catalog",
+            status: "error",
+            trigger: raw.trigger,
+            startedAt: raw.startedAt,
+            finishedAt,
+            summary: "Синхронизация каталога",
+            error: interrupted.error,
+          })
+        } catch {
+          // журнал не критичен при старте
+        }
         return interrupted
       }
       return {
@@ -201,6 +215,12 @@ export function requestStockSync(): MoySkladSyncState {
 export function markStockSyncOk(options?: {
   finishedAt?: string
   durationMs?: number
+  /** Если false — не писать в журнал (тихий прогон без изменений) */
+  log?: boolean
+  summary?: string
+  stats?: Record<string, number | undefined>
+  startedAt?: string
+  trigger?: string
 }) {
   const finishedAt = options?.finishedAt || new Date().toISOString()
   const next = saveSyncState({
@@ -216,11 +236,43 @@ export function markStockSyncOk(options?: {
     delete memory.stockRequestedAt
     writeDisk(memory)
   }
+  if (options?.log !== false) {
+    appendOpsLog({
+      kind: "stock",
+      status: "ok",
+      trigger: options?.trigger || "schedule",
+      startedAt: options?.startedAt,
+      finishedAt,
+      durationMs: options?.durationMs,
+      summary: options?.summary || "Страховка остатков",
+      stats: options?.stats,
+    })
+  }
   return { ...next, stockRequestedAt: undefined }
 }
 
-export function markStockSyncError(error: string) {
-  return saveSyncState({ stockError: error })
+export function markStockSyncError(
+  error: string,
+  options?: {
+    durationMs?: number
+    startedAt?: string
+    trigger?: string
+    summary?: string
+  }
+) {
+  const finishedAt = new Date().toISOString()
+  const next = saveSyncState({ stockError: error })
+  appendOpsLog({
+    kind: "stock",
+    status: "error",
+    trigger: options?.trigger || "schedule",
+    startedAt: options?.startedAt,
+    finishedAt,
+    durationMs: options?.durationMs,
+    summary: options?.summary || "Страховка остатков",
+    error,
+  })
+  return next
 }
 
 export function computeNextDueAt(
@@ -271,11 +323,15 @@ export function markSyncRunning(trigger: SyncTrigger): MoySkladSyncState {
 export function markSyncOk(
   trigger: SyncTrigger,
   startedAt: string | undefined,
-  result: SyncRunResult
+  result: SyncRunResult & { reservationsCleared?: number },
+  logOpts?: { kind?: "catalog" | "force-align"; summary?: string }
 ): MoySkladSyncState {
   const finishedAt = new Date().toISOString()
   const intervalMinutes = getSyncState().intervalMinutes
-  return saveSyncState({
+  const durationMs = startedAt
+    ? Math.max(0, new Date(finishedAt).getTime() - new Date(startedAt).getTime())
+    : undefined
+  const saved = saveSyncState({
     status: "ok",
     trigger,
     startedAt,
@@ -285,16 +341,45 @@ export function markSyncOk(
     nextDueAt: computeNextDueAt(finishedAt, intervalMinutes),
     lastStockSyncAt: finishedAt,
   })
+  const kind = logOpts?.kind || "catalog"
+  appendOpsLog({
+    kind,
+    status: "ok",
+    trigger,
+    startedAt,
+    finishedAt,
+    durationMs,
+    summary:
+      logOpts?.summary ||
+      (kind === "force-align"
+        ? "Выравнивание по МойСклад"
+        : "Синхронизация каталога"),
+    stats: {
+      created: result.created,
+      updated: result.updated,
+      unchanged: result.unchanged,
+      imagesSynced: result.imagesSynced,
+      stockUpdated: result.stockUpdated,
+      hidden: result.hidden,
+      reservationsCleared: result.reservationsCleared,
+      errors: result.errors?.length,
+    },
+  })
+  return saved
 }
 
 export function markSyncError(
   trigger: SyncTrigger,
   startedAt: string | undefined,
-  error: string
+  error: string,
+  logOpts?: { kind?: "catalog" | "force-align"; summary?: string }
 ): MoySkladSyncState {
   const finishedAt = new Date().toISOString()
   const intervalMinutes = getSyncState().intervalMinutes
-  return saveSyncState({
+  const durationMs = startedAt
+    ? Math.max(0, new Date(finishedAt).getTime() - new Date(startedAt).getTime())
+    : undefined
+  const saved = saveSyncState({
     status: "error",
     trigger,
     startedAt,
@@ -302,4 +387,20 @@ export function markSyncError(
     error,
     nextDueAt: computeNextDueAt(finishedAt, intervalMinutes),
   })
+  const kind = logOpts?.kind || "catalog"
+  appendOpsLog({
+    kind,
+    status: "error",
+    trigger,
+    startedAt,
+    finishedAt,
+    durationMs,
+    summary:
+      logOpts?.summary ||
+      (kind === "force-align"
+        ? "Выравнивание по МойСклад"
+        : "Синхронизация каталога"),
+    error,
+  })
+  return saved
 }
